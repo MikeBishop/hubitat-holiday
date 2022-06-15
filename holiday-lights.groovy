@@ -169,7 +169,9 @@ Map pageImport() {
                                 app.updateSetting("holiday${i}${it}Offset", [type: "number", value: source[key].offset])
                             }
                         }
-                        state.holidayIndices.add(i);
+                        def indices = state.holidayIndices;
+                        indices.add(i);
+                        state.holidayIndices = indices;
                         state.nextHolidayIndex += 1;
                         state.numHolidays = i;
                         paragraph "Imported ${source.name}"
@@ -281,18 +283,29 @@ private StringifyDate(int index) {
             if( settings["holiday${index}${it}Type"] != "special" ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
                 log.debug "Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}"
-                def month = Month.valueOf(settings["holiday${index}${it}Month"]);
+                def monthEnum = settings["holiday${index}${it}Month"];
+                if (monthEnum instanceof ArrayList) {
+                    monthEnum = monthEnum[0]
+                }
+                def month = Month.valueOf(monthEnum);
                 def monthString = LocalDate.now().with(month).format(formatter);
 
-                if( settings["holiday${index}${it}Offset"] ) {
-                    def offset = settings["holiday${index}${it}Offset"];
+                def offset = settings["holiday${index}${it}Offset"]
+                if( ![null, "null", "0", 0].contains(offset) ) {
+                    if( offset instanceof String ) {
+                        offset = Integer.parseInt(offset);
+                    }
                     result += "${Math.abs(offset)} days ${offset > 0 ? "after" : "before"} "
                 }
 
                 if( settings["holiday${index}${it}Type"] == "ordinal" ) {
-                    result += "${ORDINAL[settings["holiday${index}${it}Ordinal"]]} ";
+                    result += "${ORDINALS[settings["holiday${index}${it}Ordinal"]]} ";
                     def formatter = DateTimeFormatter.ofPattern("EEEE");
-                    def day = DayOfWeek.valueOf(settings["holiday${index}${it}Weekday"]);
+                    def dayEnum = settings["holiday${index}${it}Weekday"];
+                    if( dayEnum instanceof ArrayList ) {
+                        dayEnum = dayEnum[0];
+                    }
+                    def day = DayOfWeek.valueOf(dayEnum);
                     result += LocalDate.now().with(day).format(formatter) + " of "
                     result += monthString;
                     return result;
@@ -338,12 +351,12 @@ void debug(String msg) {
 }
 
 @Field static final Map ORDINALS = [
-    (1): "first",
-    (2): "second",
-    (3): "third",
-    (4): "fourth",
-    (5): "fifth",
-    (-1): "last"
+    "1": "First",
+    "2": "Second",
+    "3": "Third",
+    "4": "Fourth",
+    "5": "Fifth",
+    "-1": "Last"
 ]
 
 @Field static final Map SPECIALS = [
