@@ -242,7 +242,7 @@ def pageEditHoliday(params) {
                     input "holiday${i}${date}Month", "enum", title: "Month", options: monthOptions,
                         submitOnChange: true, width: 5, required: true
                     if( settings["holiday${i}${date}Type"] == "fixed" && settings["holiday${i}${date}Month"] ) {
-                        def numDays = Month.valueOf(settings["holiday${i}${date}Month"]).length(true)
+                        def numDays = Month.valueOf(unarray(settings["holiday${i}${date}Month"])).length(true)
                         input "holiday${i}${date}Day", "number", title: "Date", range:"1..${numDays}",
                             width: 5, required: true
                     }
@@ -275,18 +275,16 @@ private DeleteHoliday(int index) {
 private StringifyDate(int index) {
     def dates = ["End"];
     if( settings["holiday${index}Span"] ) {
-        dates.push("Start");
+        dates.add(0, "Start");
     }
+    log.debug "Dates are ${dates}"
     dates.collect {
         try {
             def result = ""
             if( settings["holiday${index}${it}Type"] != "special" ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
                 log.debug "Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}"
-                def monthEnum = settings["holiday${index}${it}Month"];
-                if (monthEnum instanceof ArrayList) {
-                    monthEnum = monthEnum[0]
-                }
+                def monthEnum = unarray(settings["holiday${index}${it}Month"]);
                 def month = Month.valueOf(monthEnum);
                 def monthString = LocalDate.now().with(month).format(formatter);
 
@@ -295,16 +293,16 @@ private StringifyDate(int index) {
                     if( offset instanceof String ) {
                         offset = Integer.parseInt(offset);
                     }
-                    result += "${Math.abs(offset)} days ${offset > 0 ? "after" : "before"} "
+                    def absOffset = Math.abs(offset)
+                    result += "${absOffset} day${absOffset > 1 ? "s" : ""} ${offset > 0 ? "after" : "before"} "
                 }
 
                 if( settings["holiday${index}${it}Type"] == "ordinal" ) {
-                    result += "${ORDINALS[settings["holiday${index}${it}Ordinal"]]} ";
+                    def ordinal = unarray(settings["holiday${index}${it}Ordinal"]);
+                    log.debug "Ordinal is ${ordinal} -> ${ORDINALS[ordinal]}"
+                    result += "${ORDINALS[ordinal]} ";
                     def formatter = DateTimeFormatter.ofPattern("EEEE");
-                    def dayEnum = settings["holiday${index}${it}Weekday"];
-                    if( dayEnum instanceof ArrayList ) {
-                        dayEnum = dayEnum[0];
-                    }
+                    def dayEnum = unarray(settings["holiday${index}${it}Weekday"]);
                     def day = DayOfWeek.valueOf(dayEnum);
                     result += LocalDate.now().with(day).format(formatter) + " of "
                     result += monthString;
@@ -324,6 +322,15 @@ private StringifyDate(int index) {
             return "Invalid date"
         }
     }.join(" through ")
+}
+
+private unarray(thing) {
+    if( thing instanceof ArrayList ) {
+        return thing[0]
+    }
+    else {
+        return thing
+    }
 }
 
 void updated() {
@@ -403,7 +410,7 @@ private Map GetDefaultHolidays() {
             ],
             [name: "Juneteenth", endDate: [type: "fixed", month: 6, day: 19], colors: RedWhiteAndBlue],
             [name: "Independence Day", endDate: [type: "fixed", month: 7, day: 4], colors: RedWhiteAndBlue],
-            [name: "Labor Day", endDate: [type: "fixed", month: 9, weekday: DayOfWeek.MONDAY, ordinal: 1], colors: RedWhiteAndBlue],
+            [name: "Labor Day", endDate: [type: "ordinal", month: 9, weekday: DayOfWeek.MONDAY, ordinal: 1], colors: RedWhiteAndBlue],
             [name: "Veterans Day", endDate: [type: "fixed", month: 9, day: 11], colors: RedWhiteAndBlue],
             [name: "Halloween", endDate: [type: "fixed", month: 10, day: 31],
                 colors: [COLORS["Orange"], COLORS["Indigo"]]],
