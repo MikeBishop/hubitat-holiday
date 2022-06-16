@@ -30,6 +30,7 @@ preferences {
 
 Map mainPage() {
     dynamicPage(name: "mainPage", title: "Holiday Lighting", install: true, uninstall: true) {
+        initialize();
         section("Options") {
             input "thisName", "text", title: "Name this instance", submitOnChange: true
             if(thisName) app.updateLabel("$thisName")
@@ -64,12 +65,39 @@ Map mainPage() {
 Map deviceSelection() {
     dynamicPage(name: "deviceSelection", title: "Devices to Use") {
         section("Devices for Holiday Display") {
-            int index = 0;
-            for(index = 0; settings["device${index}"] != null; index++) {
-                // Show all previously selected devices
-                input "device${index}", "capability.colorControl", title: "RGB light ${index}", multiple: false, submitOnChange: true
+            def key;
+            def displayIndex = 0
+            log.debug "Device indices are ${state.deviceIndices}"
+            def deviceIndices = state.deviceIndices.clone();
+            for( def index in deviceIndices ) {
+                key = "device${index}";
+                log.debug "settings[${key}] is ${settings[key]}";
+                if( settings[key] == null ) {
+                    // User unselected this device -- drop the index
+                    state.deviceIndices.removeElement(index);
+                    app.removeSetting(key);
+                }
+                else {
+                    displayIndex += 1;
+                    input key, "capability.colorControl", title: "RGB light ${displayIndex}",
+                        multiple: false, submitOnChange: true
+                }
             }
-            input "device${index}", "capability.colorControl", title: "RGB light ${index}", multiple: false, submitOnChange: true
+            def index = state.nextDeviceIndex;
+            displayIndex += 1;
+            key = "device${index}";
+            input key, "capability.colorControl", title: "RGB light ${displayIndex}",
+                multiple: false, submitOnChange: true
+            if( settings[key] != null ) {
+                // User selected device in new slot
+                state.deviceIndices.add(index);
+                state.nextDeviceIndex += 1;
+                index = state.nextDeviceIndex;
+                displayIndex += 1;
+                key = "device${index}";
+                input key, "capability.colorControl", title: "RGB light ${displayIndex}",
+                    multiple: false, submitOnChange: true
+            }
         }
         section("Triggers for Illumination") {
             paragraph "These devices will cause the bulbs to switch to white light temporarily, regardless of holiday settings"
@@ -95,11 +123,13 @@ Map holidayDefinitions() {
                     href(
                         name: "editHoliday${i}",
                         page: "pageEditHoliday",
-                        title: "Edit ${settings["holiday${i}Name"]}",
+                        title: "Edit ${settings["holiday${i}Name"]} schedule",
                         description: StringifyDate(i),
-                        params: [holidayIndex: i]
+                        params: [holidayIndex: i],
+                        width: 8
                     )
-                    input "deleteHoliday${i}", "button", title: "Delete", submitOnChange: true
+                    def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
+                    input "deleteHoliday${i}", "button", title: "${delete} Delete", submitOnChange: true, width: 4
                 }
             }
         }
@@ -146,27 +176,27 @@ Map pageImport() {
                         def i = state.nextHolidayIndex;
                         def source = it;
                         log.debug "Attempting ${source.name}"
-                        app.updateSetting("holiday${i}Name", [type: "text", value: source.name])
-                        app.updateSetting("holiday${i}Span", [type: "bool", value: source.startDate != null])
+                        app.updateSetting("holiday${i}Name", source.name)
+                        app.updateSetting("holiday${i}Span", source.startDate != null)
                         ["Start", "End"].each {
                             def key = it.toLowerCase() + "Date"
                             if( source[key] ) {
-                                app.updateSetting("holiday${i}${it}Type", [type: "enum", value: source[key].type])
+                                app.updateSetting("holiday${i}${it}Type", source[key].type)
                                 if( source[key].type != "special" ) {
                                     if( source[key].type == "ordinal" ) {
-                                        app.updateSetting("holiday${i}${it}Ordinal", [type: "enum", value: source[key].ordinal])
-                                        app.updateSetting("holiday${i}${it}Weekday", [type: "enum", value: source[key].weekday])
+                                        app.updateSetting("holiday${i}${it}Ordinal", source[key].ordinal)
+                                        app.updateSetting("holiday${i}${it}Weekday", source[key].weekday)
                                     }
                                     else {
                                         //Fixed
-                                        app.updateSetting("holiday${i}${it}Day", [type: "number", value: source[key].day])
+                                        app.updateSetting("holiday${i}${it}Day", source[key].day)
                                     }
-                                    app.updateSetting("holiday${i}${it}Month", [type: "enum", value: Month.of(source[key].month)])
+                                    app.updateSetting("holiday${i}${it}Month", Month.of(source[key].month))
                                 }
                                 else {
-                                    app.updateSetting("holiday${i}${it}Special", [type: "enum", value: source[key].special])
+                                    app.updateSetting("holiday${i}${it}Special", source[key].special)
                                 }
-                                app.updateSetting("holiday${i}${it}Offset", [type: "number", value: source[key].offset])
+                                app.updateSetting("holiday${i}${it}Offset", source[key].offset)
                             }
                         }
                         def indices = state.holidayIndices;
@@ -219,7 +249,7 @@ def pageEditHoliday(params) {
 
         def dates = ["End"]
         if( settings["holiday${i}Span"] ) {
-            dates.push("Start")
+            dates.add(0, "Start")
         }
 
         dates.each{
@@ -342,9 +372,13 @@ void installed() {
 }
 
 void initialize() {
-    app.updateSetting()
-    state.nextHolidayIndex = state.nextHolidayIndex ?: 0
-    state.holidayIndices = state.holidayIndices ?: []
+    if( state.deviceIndices instanceof Boolean ) {
+        state.deviceIndices = []
+    }
+    state.nextHolidayIndex = state.nextHolidayIndex ?: 0;
+    state.holidayIndices = state.holidayIndices ?: [];
+    state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
+    state.deviceIndices = state.deviceIndices ?: [];
     log.debug "Initialize.... ${state.nextHolidayIndex} and ${state.holidayIndices}"
 }
 
@@ -488,3 +522,5 @@ private static easterForYear(int Y) {
             }
         }
 }
+
+@Field static final String trashIcon = "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/images/trash40.png"
