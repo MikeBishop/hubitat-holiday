@@ -492,21 +492,21 @@ void debug(String msg) {
     "Daylight": [hueColor: 53, saturation: 91],
     "Soft White": [hueColor: 23, saturation: 56],
     "Warm White": [hueColor: 20, saturation: 80],
-    "Navy Blue": [hueColor: 61, saturation: 100],
-    "Blue": [hueColor: 65, saturation: 100],
+    "Pink": [hueColor: 90.78, saturation: 67.84],
+    "Raspberry": [hueColor: 94, saturation: 100],
+    "Red": [hueColor: 0, saturation: 100],
+    "Brick Red": [hueColor: 4, saturation: 100]
+    "Safety Orange": [hueColor: 7, saturation: 100],
+    "Orange": [hueColor: 10, saturation: 100],
+    "Amber": [hueColor: 13, saturation: 100],
+    "Yellow": [hueColor: 17, saturation: 100],
     "Green": [hueColor: 33, saturation: 100],
     "Turquoise": [hueColor: 47, saturation: 100],
     "Aqua": [hueColor: 50, saturation: 100],
-    "Amber": [hueColor: 13, saturation: 100],
-    "Yellow": [hueColor: 17, saturation: 100],
-    "Safety Orange": [hueColor: 7, saturation: 100],
-    "Orange": [hueColor: 10, saturation: 100],
+    "Navy Blue": [hueColor: 61, saturation: 100],
+    "Blue": [hueColor: 65, saturation: 100],
     "Indigo": [hueColor: 73, saturation: 100],
     "Purple": [hueColor: 82, saturation: 100],
-    "Pink": [hueColor: 90.78, saturation: 67.84],
-    "Rasberry": [hueColor: 94, saturation: 100],
-    "Red": [hueColor: 0, saturation: 100],
-    "Brick Red": [hueColor: 4, saturation: 100]
 ];
 
 
