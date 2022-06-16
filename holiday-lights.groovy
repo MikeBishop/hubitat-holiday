@@ -9,7 +9,7 @@ import java.time.Month;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
 import java.time.LocalDate;
-//import static java.time.temporal.TemporalAdjusters.*;
+// Not yet allowed: import static java.time.temporal.TemporalAdjusters.*;
 import java.text.*;
 
 definition (
@@ -111,6 +111,7 @@ Map deviceSelection() {
 
 Map holidayDefinitions() {
     dynamicPage(name: "holidayDefinitions", title: "Select Holidays to Illuminate") {
+        sortHolidays()
         log.debug "Indices are ${state.holidayIndices}"
         def numHolidays = state.holidayIndices.size();
         if( numHolidays ) {
@@ -184,26 +185,27 @@ Map pageImport() {
                                 app.updateSetting("holiday${i}${it}Type", source[key].type)
                                 if( source[key].type != "special" ) {
                                     if( source[key].type == "ordinal" ) {
-                                        app.updateSetting("holiday${i}${it}Ordinal", source[key].ordinal)
-                                        app.updateSetting("holiday${i}${it}Weekday", source[key].weekday)
+                                        log.debug "Ordinal, ${source[key].ordinal} ${source[key].weekday.toString()} of ${source[key].month.toString()}"
+                                        app.updateSetting("holiday${i}${it}Ordinal", source[key].ordinal.toString())
+                                        app.updateSetting("holiday${i}${it}Weekday", source[key].weekday.toString())
                                     }
                                     else {
                                         //Fixed
+                                        log.debug "Fixed, ${source[key].month.toString()} ${source[key].day}"
                                         app.updateSetting("holiday${i}${it}Day", source[key].day)
                                     }
-                                    app.updateSetting("holiday${i}${it}Month", Month.of(source[key].month))
+                                    app.updateSetting("holiday${i}${it}Month", source[key].month.toString())
                                 }
                                 else {
                                     app.updateSetting("holiday${i}${it}Special", source[key].special)
                                 }
-                                app.updateSetting("holiday${i}${it}Offset", source[key].offset)
+                                app.updateSetting("holiday${i}${it}Offset", source[key].offset ?: 0)
                             }
                         }
                         def indices = state.holidayIndices;
                         indices.add(i);
                         state.holidayIndices = indices;
                         state.nextHolidayIndex += 1;
-                        state.numHolidays = i;
                         paragraph "Imported ${source.name}"
                     }
                     paragraph "Finished importing ${list}!"
@@ -219,19 +221,20 @@ Map pageImport() {
 }
 
 def pageEditHoliday(params) {
-    Integer index
+    Integer i
     if( params.holidayIndex != null ) {
-        index = params.holidayIndex
-        state.editingHolidayIndex = index
+        i = params.holidayIndex
+        state.editingHolidayIndex = i
     }
     else {
-        index = state.editingHolidayIndex
+        i = state.editingHolidayIndex
         log.warn "Unexpected contents of params: ${params}"
     }
 
-    if( index == state.nextHolidayIndex ) {
+    if( i == state.nextHolidayIndex && holidayIsValid(i) ) {
         state.nextHolidayIndex += 1;
-        state.holidayIndices.add(index)
+        state.holidayIndices.add(i);
+        sortHolidays();
     }
 
     def formatter = DateTimeFormatter.ofPattern("MMMM");
@@ -239,7 +242,6 @@ def pageEditHoliday(params) {
     formatter = DateTimeFormatter.ofPattern("EEEE");
     def dayOptions = DayOfWeek.values().collectEntries { [it, LocalDate.now().with(it).format(formatter)]}
 
-    def i = index // Will use this indirection to sort later
     def name = settings["holiday${i}Name"] ?: "New Holiday"
     dynamicPage(name: "pageEditHoliday", title: "Edit ${name}") {
         section("Holiday definition") {
@@ -264,9 +266,9 @@ def pageEditHoliday(params) {
                 if( settings["holiday${i}${date}Type"] in ["ordinal", "fixed"] ) {
                     if( settings["holiday${i}${date}Type"] == "ordinal" ) {
                         input "holiday${i}${date}Ordinal", "enum", title: "Which week?",
-                            options: ORDINALS, required: true
+                            options: ORDINALS, required: true, submitOnChange: true
                         input "holiday${i}${date}Weekday", "enum", title: "Which day?",
-                            options: dayOptions, width: 5, required: true
+                            options: dayOptions, width: 5, required: true, submitOnChange: true
                         paragraph "\nof", width: 2
                     }
                     input "holiday${i}${date}Month", "enum", title: "Month", options: monthOptions,
@@ -274,16 +276,95 @@ def pageEditHoliday(params) {
                     if( settings["holiday${i}${date}Type"] == "fixed" && settings["holiday${i}${date}Month"] ) {
                         def numDays = Month.valueOf(unarray(settings["holiday${i}${date}Month"])).length(true)
                         input "holiday${i}${date}Day", "number", title: "Date", range:"1..${numDays}",
-                            width: 5, required: true
+                            width: 5, required: true, submitOnChange: true
                     }
                 }
                 else if (settings["holiday${i}${date}Type"] == "special" ) {
-                    input "holiday${i}${date}Special", "enum", options: SPECIALS, required: true
+                    input "holiday${i}${date}Special", "enum", options: SPECIALS, required: true, submitOnChange: true
                 }
                 input "holiday${i}${date}Offset", "number", title: "Offset (optional)", range:"-60..60"
             }
         }
     }
+}
+
+private holidayIsValid(int i) {
+    return settings["holiday${i}Name"] && holidayDateIsValid("holiday${i}End") &&
+        (!settings["holiday${i}Span"] || holidayDateIsValid("holiday${i}Start"))
+}
+
+private holidayDateIsValid(String key) {
+    return settings["${key}Type"] in ["ordinal", "fixed", "special"] && (
+            (settings["${key}Type"] == "ordinal" && settings["${key}Ordinal"] && settings["${key}Weekday"] ) ||
+            (settings["${key}Type"] == "fixed" && settings["${key}Day"]) ||
+            (settings["${key}Type"] == "special" && settings["${key}Special"] in SPECIALS.keySet())
+        ) && (settings["${key}Type"] == "special" || settings["${key}Month"] != null)
+}
+
+private holidayDate(int i, String dateType, int year) {
+    def name = settings["holiday${i}Name}"];
+    log.debug "Finding concrete ${dateType} date for ${name}"
+    if( dateType == "Start" && !settings["holiday${i}Span"]) {
+        // For non-Span holidays, the start date is the day before the end date
+        return holidayDate(i, "End", year)?.minusDays(1);
+    }
+
+    def key = "holiday${i}${dateType}";
+    def type = settings["${key}Type"];
+    def month = settings["${key}Month"];
+    def date = settings["${key}Date"];
+    def result;
+    switch(type) {
+        case "fixed":
+            log.debug "Fixed ${year}, ${month}, ${date}"
+            result = LocalDate.of(year, Month.valueOf(month), date);
+            break;
+        case "ordinal":
+            def ordinal = settings["${key}Ordinal"]
+            def weekday = settings["${key}Weekday"]
+            log.debug "Ordinal ${year}, ${month}, ${ordinal}, ${weekday}"
+            result = LocalDate.of(year, Month.valueOf(month), 15).
+                with(dayOfWeekInMonth(Integer.parseInt(ordinal), DayOfWeek.valueOf(weekday)));
+            break;
+        case "special":
+            def special = settings["${key}Special"];
+            switch(special) {
+                case "easter":
+                    result = easterForYear(year);
+                    break;
+                default:
+                    log.warn "Unknown special ${special}"
+            }
+            break;
+        default:
+            log.warn "Invalid date format ${type} in holiday ${name}!"
+            return null;
+    }
+
+    def offset = settings["${key}Offset"] ?: 0;
+
+    return result.plusDays(offset);
+}
+
+private sortHolidays() {
+    // For now, this relies on a prohibited function. Don't try to execute until allowed.
+    return;
+
+    def thisYear = LocalDate.now().getYear()
+    log.debug "Sorting holidays...."
+    def originalList = state.holidayIndices
+    def sortedList = originalList.collect{
+        [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
+        }.sort{ a,b ->
+            def endResult = a[2] <=> b[2];
+            if(endResult == 0) {
+                return a[1] <=> b[1];
+            }
+            else {
+                return endResult;
+            }
+        }.collect{it[0]}
+    log.debug "${originalList} became ${sortedList}"
 }
 
 void appButtonHandler(btn) {
@@ -296,7 +377,8 @@ void appButtonHandler(btn) {
 
 private DeleteHoliday(int index) {
     log.debug "Deleting ${index}";
-    settings.keySet().find{ it.startsWith("holiday${index}") }.each {
+    settings.keySet().findAll{ it.startsWith("holiday${index}") }.each {
+        log.debug "Removing setting ${it}"
         app.removeSetting(it);
     }
     state.holidayIndices.removeElement(index);
@@ -434,24 +516,24 @@ private Map GetDefaultHolidays() {
     final List RedWhiteAndBlue = [COLORS["Red"], COLORS["White"], COLORS["Blue"]];
     return [
         "United States": [
-            [name: "Presidents Day", endDate: [type: "ordinal", month: 2, weekday: DayOfWeek.MONDAY, ordinal: 3], colors: RedWhiteAndBlue],
-            [name: "St. Patrick's Day", endDate: [type: "fixed", month: 3, day: 17], colors: [COLORS["Green"]]],
-            [name: "Memorial Day", endDate: [type: "ordinal", month: 5, weekday: DayOfWeek.MONDAY, ordinal: -1], colors: RedWhiteAndBlue],
-            [name: "Pride Month", startDate: [type: "fixed", month: 6, day: 1],
-                endDate: [type: "fixed", month: 6, day: 30],
+            [name: "Presidents Day", endDate: [type: "ordinal", month: Month.FEBRUARY, weekday: DayOfWeek.MONDAY, ordinal: 3], colors: RedWhiteAndBlue],
+            [name: "St. Patrick's Day", endDate: [type: "fixed", month: Month.MARCH, day: 17], colors: [COLORS["Green"]]],
+            [name: "Memorial Day", endDate: [type: "ordinal", month: Month.MAY, weekday: DayOfWeek.MONDAY, ordinal: -1], colors: RedWhiteAndBlue],
+            [name: "Pride Month", startDate: [type: "fixed", month: Month.JUNE, day: 1],
+                endDate: [type: "fixed", month: Month.JUNE, day: 30],
                 colors: [COLORS["Red"], COLORS["Orange"], COLORS["Yellow"],
                         COLORS["Green"], COLORS["Indigo"], COLORS["Purple"]]
             ],
-            [name: "Juneteenth", endDate: [type: "fixed", month: 6, day: 19], colors: RedWhiteAndBlue],
-            [name: "Independence Day", endDate: [type: "fixed", month: 7, day: 4], colors: RedWhiteAndBlue],
-            [name: "Labor Day", endDate: [type: "ordinal", month: 9, weekday: DayOfWeek.MONDAY, ordinal: 1], colors: RedWhiteAndBlue],
-            [name: "Veterans Day", endDate: [type: "fixed", month: 9, day: 11], colors: RedWhiteAndBlue],
-            [name: "Halloween", endDate: [type: "fixed", month: 10, day: 31],
+            [name: "Juneteenth", endDate: [type: "fixed", month: Month.JUNE, day: 19], colors: RedWhiteAndBlue],
+            [name: "Independence Day", endDate: [type: "fixed", month: Month.JULY, day: 4], colors: RedWhiteAndBlue],
+            [name: "Labor Day", endDate: [type: "ordinal", month: Month.SEPTEMBER, weekday: DayOfWeek.MONDAY, ordinal: 1], colors: RedWhiteAndBlue],
+            [name: "Veterans Day", endDate: [type: "fixed", month: Month.OCTOBER, day: 11], colors: RedWhiteAndBlue],
+            [name: "Halloween", endDate: [type: "fixed", month: Month.OCTOBER, day: 31],
                 colors: [COLORS["Orange"], COLORS["Indigo"]]],
-            [name: "Thanksgiving Day", endDate: [type: "ordinal", month: 11, weekday: DayOfWeek.THURSDAY, ordinal: 4],
+            [name: "Thanksgiving Day", endDate: [type: "ordinal", month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4],
                 colors: [COLORS["Orange"], COLORS["White"]]],
-            [name: "Christmas", startDate: [type: "ordinal", month: 11, weekday: DayOfWeek.THURSDAY, ordinal: 4, offset: 1],
-                endDate: [type: "fixed", month: 12, day: 26],
+            [name: "Christmas", startDate: [type: "ordinal", month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4, offset: 1],
+                endDate: [type: "fixed", month: Month.DECEMBER, day: 26],
                 colors: [COLORS["Red"], COLORS["Green"]]]
         ],
         "Christian": [
@@ -501,24 +583,24 @@ private static easterForYear(int Y) {
         // A corner case,
         // when D is 29
         if ((D == 29) && (E == 6)) {
-            return new GregorianCalendar(Y, 4, 19);
+            return LocalDate.of(Y, 4, 19);
         }
         // Another corner case,
         // when D is 28
         else if ((D == 28) && (E == 6)) {
-            return new GregorianCalendar(Y, 4, 18);
+            return LocalDate.of(Y, 4, 18);
         }
         else {
 
             // If days > 31, move to April
             // April = 4th Month
             if (days > 31) {
-                return new GregorianCalendar(Y, 4, days-31);
+                return LocalDate.of(Y, 4, days-31);
             }
             // Otherwise, stay on March
             // March = 3rd Month
             else {
-                return new GregorianCalendar(Y, 3, days);
+                return LocalDate.of(Y, 3, days);
             }
         }
 }
