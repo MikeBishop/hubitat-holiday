@@ -26,6 +26,7 @@ preferences {
     page(name: "holidayDefinitions")
     page(name: "pageEditHoliday")
     page(name: "pageImport")
+    page(name: "pageColorSelect")
 }
 
 Map mainPage() {
@@ -113,6 +114,7 @@ Map holidayDefinitions() {
     dynamicPage(name: "holidayDefinitions", title: "Select Holidays to Illuminate") {
         sortHolidays()
         log.debug "Indices are ${state.holidayIndices}"
+        def colorNames = COLORS.collect{ it.key };
         def numHolidays = state.holidayIndices.size();
         if( numHolidays ) {
             for( int j = 0; j < numHolidays; j++) {
@@ -120,7 +122,15 @@ Map holidayDefinitions() {
                 def title = "${settings["holiday${i}Name"]}"
 
                 section(hideable: true, hidden: true, title) {
-                    /* TODO:  Show color list here */
+                    // List colors here!
+                    href(
+                        name: "selectColors${i}",
+                        page: "pageColorSelect",
+                        title: "Edit ${settings["holiday${i}Name"]} colors",
+                        description: StringifyDate(i),
+                        params: [holidayIndex: i],
+                        width: 8
+                    )
                     href(
                         name: "editHoliday${i}",
                         page: "pageEditHoliday",
@@ -160,6 +170,7 @@ Map holidayDefinitions() {
                 )
             }
         }
+        log.debug "Finished page"
     }
 }
 
@@ -288,6 +299,75 @@ def pageEditHoliday(params) {
     }
 }
 
+def pageColorSelect(params) {
+    Integer i
+    if( params.holidayIndex != null ) {
+        i = params.holidayIndex
+        state.editingHolidayIndex = i
+    }
+    else {
+        i = state.editingHolidayIndex
+        log.warn "Unexpected contents of params: ${params}"
+    }
+
+    if( !state.colorIndices?.containsKey(i) ) {
+        if( !state.colorIndices ) {
+            state.colorIndices = [i: []];
+        }
+        else {
+            state.colorIndices[i] = [];
+        }
+    }
+    if( !state.nextColorIndices ) {
+        state.nextColorIndices = [(i): 0];
+    }
+
+    def colorsForThisHoliday = state.colorIndices[i] ?: [];
+    def nextColor = state.nextColorIndices[i] ?: 0;
+    if( settings["holiday${i}color${nextColor}"] != null ) {
+        // User made a selection on the next input
+        colorsForThisHoliday.add(nextColor);
+        state.colorIndices[i] = colorsForThisHoliday;
+        nextColor += 1;
+        state.nextColorIndices[i] = nextColor;
+    }
+
+    def displayIndex = 0;
+    log.debug "colorsForThisHoliday ${colorsForThisHoliday}"
+    for(int c = 0; c < colorsForThisHoliday.size(); c++) {
+        def d = colorsForThisHoliday[c];
+        if( settings["holiday${i}color${d}"] == null ) {
+            // User unselected this color
+            state.colorIndices[i].removeElement(d);
+            app.removeSetting("holiday${i}color${d}");
+        }
+        else {
+            displayIndex += 1;
+            // For each existing color slot, display a selector
+            def custom = settings["holiday${i}color${d}"] == "Custom"
+            input "holiday${i}color${d}", "enum", title: "Color ${displayIndex}",
+                multiple: false, options: colorNames, submitOnChange: true,
+                required: true, width: custom ? 4 : 8
+            if( custom ) {
+                input "holiday${i}color${d}.custom", "COLOR_MAP", submitOnChange: true,
+                title: "Custom Color ${displayIndex}", required: true, width: 4
+            }
+            else {
+                app.removeSetting("holiday${i}color${d}.custom");
+            }
+        }
+    }
+
+    log.debug "Rendering next color selector"
+    // Now supply the input for adding a new one
+    displayIndex += 1;
+    input "holiday${i}color${nextColor}", "enum", title: "Color ${displayIndex}",
+        multiple: false, options: colorNames, submitOnChange: true, required: false
+    // Handling "Custom" isn't required, since the page will refresh
+    // and render it above.
+
+}
+
 private holidayIsValid(int i) {
     return settings["holiday${i}Name"] && holidayDateIsValid("holiday${i}End") &&
         (!settings["holiday${i}Span"] || holidayDateIsValid("holiday${i}Start"))
@@ -401,7 +481,7 @@ private StringifyDate(int index) {
                 def monthString = LocalDate.now().with(month).format(formatter);
 
                 def offset = settings["holiday${index}${it}Offset"]
-                if( ![null, "null", "0", 0].contains(offset) ) {
+                if( offset && Integer.parseInt(offset.toString()) != 0 ) {
                     if( offset instanceof String ) {
                         offset = Integer.parseInt(offset);
                     }
@@ -495,7 +575,7 @@ void debug(String msg) {
     "Pink": [hueColor: 90.78, saturation: 67.84],
     "Raspberry": [hueColor: 94, saturation: 100],
     "Red": [hueColor: 0, saturation: 100],
-    "Brick Red": [hueColor: 4, saturation: 100]
+    "Brick Red": [hueColor: 4, saturation: 100],
     "Safety Orange": [hueColor: 7, saturation: 100],
     "Orange": [hueColor: 10, saturation: 100],
     "Amber": [hueColor: 13, saturation: 100],
@@ -507,6 +587,7 @@ void debug(String msg) {
     "Blue": [hueColor: 65, saturation: 100],
     "Indigo": [hueColor: 73, saturation: 100],
     "Purple": [hueColor: 82, saturation: 100],
+    "Custom": null
 ];
 
 
