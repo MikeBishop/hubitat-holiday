@@ -114,7 +114,6 @@ Map holidayDefinitions() {
     dynamicPage(name: "holidayDefinitions", title: "Select Holidays to Illuminate") {
         sortHolidays()
         log.debug "Indices are ${state.holidayIndices}"
-        def colorNames = COLORS.collect{ it.key };
         def numHolidays = state.holidayIndices.size();
         if( numHolidays ) {
             for( int j = 0; j < numHolidays; j++) {
@@ -310,62 +309,66 @@ def pageColorSelect(params) {
         log.warn "Unexpected contents of params: ${params}"
     }
 
-    if( !state.colorIndices?.containsKey(i) ) {
-        if( !state.colorIndices ) {
-            state.colorIndices = [i: []];
-        }
-        else {
-            state.colorIndices[i] = [];
-        }
-    }
-    if( !state.nextColorIndices ) {
-        state.nextColorIndices = [(i): 0];
-    }
+    def colorNames = COLORS.collect{ it.key };
+    def name = settings["holiday${i}Name"] ?: "New Holiday"
+    dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
+        section("Colors for Display") {
+            if( !state.colorIndices?.containsKey(i) ) {
+                if( !state.colorIndices ) {
+                    state.colorIndices = [i: []];
+                }
+                else {
+                    state.colorIndices[i] = [];
+                }
+            }
+            if( !state.nextColorIndices ) {
+                state.nextColorIndices = [(i): 0];
+            }
 
-    def colorsForThisHoliday = state.colorIndices[i] ?: [];
-    def nextColor = state.nextColorIndices[i] ?: 0;
-    if( settings["holiday${i}color${nextColor}"] != null ) {
-        // User made a selection on the next input
-        colorsForThisHoliday.add(nextColor);
-        state.colorIndices[i] = colorsForThisHoliday;
-        nextColor += 1;
-        state.nextColorIndices[i] = nextColor;
-    }
+            def colorsForThisHoliday = state.colorIndices[i] ?: [];
+            def nextColor = state.nextColorIndices[i] ?: 0;
+            if( settings["holiday${i}color${nextColor}"] != null ) {
+                // User made a selection on the next input
+                colorsForThisHoliday.add(nextColor);
+                state.colorIndices[i] = colorsForThisHoliday;
+                nextColor += 1;
+                state.nextColorIndices[i] = nextColor;
+            }
 
-    def displayIndex = 0;
-    log.debug "colorsForThisHoliday ${colorsForThisHoliday}"
-    for(int c = 0; c < colorsForThisHoliday.size(); c++) {
-        def d = colorsForThisHoliday[c];
-        if( settings["holiday${i}color${d}"] == null ) {
-            // User unselected this color
-            state.colorIndices[i].removeElement(d);
-            app.removeSetting("holiday${i}color${d}");
-        }
-        else {
+            def displayIndex = 0;
+            log.debug "colorsForThisHoliday ${colorsForThisHoliday}"
+            for(int c = 0; c < colorsForThisHoliday.size(); c++) {
+                def d = colorsForThisHoliday[c];
+                if( settings["holiday${i}color${d}"] == null ) {
+                    // User unselected this color
+                    state.colorIndices[i].removeElement(d);
+                    app.removeSetting("holiday${i}color${d}");
+                }
+                else {
+                    displayIndex += 1;
+                    // For each existing color slot, display a selector
+                    def custom = settings["holiday${i}color${d}"] == "Custom"
+                    input "holiday${i}color${d}", "enum", title: "Color ${displayIndex}",
+                        multiple: false, options: colorNames, submitOnChange: true,
+                        required: true, width: custom ? 4 : 8
+                    if( custom ) {
+                        input "holiday${i}color${d}.custom", "color", submitOnChange: true,
+                        title: "Custom Color ${displayIndex}", required: true, width: 4
+                    }
+                    else {
+                        app.removeSetting("holiday${i}color${d}.custom");
+                    }
+                }
+            }
+
+            // Now supply the input for adding a new one
             displayIndex += 1;
-            // For each existing color slot, display a selector
-            def custom = settings["holiday${i}color${d}"] == "Custom"
-            input "holiday${i}color${d}", "enum", title: "Color ${displayIndex}",
-                multiple: false, options: colorNames, submitOnChange: true,
-                required: true, width: custom ? 4 : 8
-            if( custom ) {
-                input "holiday${i}color${d}.custom", "COLOR_MAP", submitOnChange: true,
-                title: "Custom Color ${displayIndex}", required: true, width: 4
-            }
-            else {
-                app.removeSetting("holiday${i}color${d}.custom");
-            }
+            input "holiday${i}color${nextColor}", "enum", title: "Color ${displayIndex}",
+                multiple: false, options: colorNames, submitOnChange: true, required: false
+            // Handling "Custom" isn't required, since the page will refresh
+            // and render it above.
         }
     }
-
-    log.debug "Rendering next color selector"
-    // Now supply the input for adding a new one
-    displayIndex += 1;
-    input "holiday${i}color${nextColor}", "enum", title: "Color ${displayIndex}",
-        multiple: false, options: colorNames, submitOnChange: true, required: false
-    // Handling "Custom" isn't required, since the page will refresh
-    // and render it above.
-
 }
 
 private holidayIsValid(int i) {
