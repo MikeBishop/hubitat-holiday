@@ -35,6 +35,32 @@ Map mainPage() {
         section("Options") {
             input "thisName", "text", title: "Name this instance", submitOnChange: true
             if(thisName) app.updateLabel("$thisName")
+            input "frequency", "enum", title: "Update Frequency",
+                options: [
+                    1: "1 minute",
+                    5: "5 minutes",
+                    10: "10 minutes",
+                    15: "15 minutes",
+				    30: "30 minutes",
+				    60: "1 hour",
+				    180: "3 hours"
+                ]
+            final Map TIME_OPTIONS = [
+                sunrise: "Sunrise",
+                sunset:  "Sunset",
+                custom:  "A specific time..."
+            ];
+            input "startTime", "enum", title: "Start lights at...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            input "stopTime", "enum", title: "Stop lights at...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            if( settings["startTime"] == "custom" ) {
+                input "startTimeCustom", "time", title: "Specify start time:"
+            }
+            if( settings["stopTime"] == "custom" ) {
+                input "stopTimeCustom", "time", title: "Specify stop time:"
+            }
+
             def descr = "Choose which devices to automate"
             if(settings["device0"]) {
                 descr = "";
@@ -126,7 +152,7 @@ Map holidayDefinitions() {
                         name: "selectColors${i}",
                         page: "pageColorSelect",
                         title: "Edit ${settings["holiday${i}Name"]} colors",
-                        description: StringifyDate(i),
+                        description: "TODO Colors",
                         params: [holidayIndex: i],
                         width: 8
                     )
@@ -299,9 +325,9 @@ def pageEditHoliday(params) {
 }
 
 def pageColorSelect(params) {
-    Integer i
-    if( params.holidayIndex != null ) {
-        i = params.holidayIndex
+    def i;
+    if( params?.holidayIndex != null ) {
+        i = params.holidayIndex.toString()
         state.editingHolidayIndex = i
     }
     else {
@@ -309,64 +335,224 @@ def pageColorSelect(params) {
         log.warn "Unexpected contents of params: ${params}"
     }
 
-    def colorNames = COLORS.collect{ it.key };
+    def colorOptions = COLORS.
+        collect{ "<option value=\"${it.value}\">${it.key}</option>" }.
+        join("\n")
     def name = settings["holiday${i}Name"] ?: "New Holiday"
     dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
-        section("Colors for Display") {
-            if( !state.colorIndices?.containsKey(i) ) {
-                if( !state.colorIndices ) {
-                    state.colorIndices = [i: []];
-                }
-                else {
-                    state.colorIndices[i] = [];
-                }
+        section("Display Options") {
+            input "holiday${i}Alignment", "bool", title: "Different colors on different lights?",
+                width: 5, submitOnChange: true, defaultValue: true
+            input "holiday${i}Rotation", "enum", title: "How to rotate colors",
+                width: 5, options: [
+                    random: "Random",
+                    fixed:  "Static",
+                    parade: "Sequential"
+                ], submitOnChange: true
+            if( !settings["holiday${i}Alignment"] && settings["holiday${i}Rotation"] == "Static") {
+                paragraph "Note: With this combination, only the first color will ever be used!"
             }
-            if( !state.nextColorIndices ) {
-                state.nextColorIndices = [(i): 0];
-            }
+            paragraph '''
+<script type="text/javascript">
+function syncColors(pickerId, inputId) {
+    debugger;
+    let colorMap = document.getElementById(inputId);
+    let picker = document.getElementById(pickerId);
+    let hueStr = '0', satStr = '0', valStr = '0';
+    let colorStr = colorMap.value;
 
-            def colorsForThisHoliday = state.colorIndices[i] ?: [];
-            def nextColor = state.nextColorIndices[i] ?: 0;
-            if( settings["holiday${i}color${nextColor}"] != null ) {
-                // User made a selection on the next input
-                colorsForThisHoliday.add(nextColor);
-                state.colorIndices[i] = colorsForThisHoliday;
-                nextColor += 1;
-                state.nextColorIndices[i] = nextColor;
-            }
+    if (colorStr) {
+        try {
+            colorStr = colorStr.replace(/(\\w+):/g, '"$1":');
+            colorStr = colorStr.slice(1).slice(0, -1);
+            const parsedColor = JSON.parse(`{${colorStr}}`);
+            hueStr = `${parsedColor.hue}`;
+            satStr = `${parsedColor.saturation}`;
+            levStr = `${parsedColor.level}`;
 
-            def displayIndex = 0;
-            log.debug "colorsForThisHoliday ${colorsForThisHoliday}"
-            for(int c = 0; c < colorsForThisHoliday.size(); c++) {
-                def d = colorsForThisHoliday[c];
-                if( settings["holiday${i}color${d}"] == null ) {
-                    // User unselected this color
-                    state.colorIndices[i].removeElement(d);
-                    app.removeSetting("holiday${i}color${d}");
-                }
-                else {
-                    displayIndex += 1;
-                    // For each existing color slot, display a selector
-                    def custom = settings["holiday${i}color${d}"] == "Custom"
-                    input "holiday${i}color${d}", "enum", title: "Color ${displayIndex}",
-                        multiple: false, options: colorNames, submitOnChange: true,
-                        required: true, width: custom ? 4 : 8
-                    if( custom ) {
-                        input "holiday${i}color${d}.custom", "color", submitOnChange: true,
-                        title: "Custom Color ${displayIndex}", required: true, width: 4
-                    }
-                    else {
-                        app.removeSetting("holiday${i}color${d}.custom");
-                    }
-                }
-            }
+            let hue = parseFloat(hueStr)/100;
+            let sat = parseFloat(satStr)/100;
+            let level = parseFloat(levStr)/200;
 
-            // Now supply the input for adding a new one
-            displayIndex += 1;
-            input "holiday${i}color${nextColor}", "enum", title: "Color ${displayIndex}",
-                multiple: false, options: colorNames, submitOnChange: true, required: false
-            // Handling "Custom" isn't required, since the page will refresh
-            // and render it above.
+            let RGB = HSVtoRGB(HSLtoHSV(hue, sat, level));
+
+            picker.value = "#" + ((1 << 24) + (RGB.r << 16) + (RGB.g << 8) + RGB.b).toString(16).slice(1);
+            return;
+        } catch (e) {
+            // ignore
+        }
+    }
+
+    // Otherwise, read the picker and populate the Map input
+    let hexString = picker.value;
+
+    let rgb = {
+        r: parseInt(hexString.substring(1, 3), 16),
+        g: parseInt(hexString.substring(3, 5), 16),
+        b: parseInt(hexString.substring(5, 7), 16)
+    };
+    let hsl = HSVtoHSL(RGBtoHSV(rgb));
+    colorMap.value = `[hue:${hsl.h*100}, saturation:${hsl.s*100}, level:${hsl.l*200}]`;
+}
+
+function HSVtoRGB(h, s, v) {
+    var r, g, b, i, f, p, q, t;
+    if (arguments.length === 1) {
+        s = h.s, v = h.v, h = h.h;
+    }
+    i = Math.floor(h * 6);
+    f = h * 6 - i;
+    p = v * (1 - s);
+    q = v * (1 - f * s);
+    t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+    }
+    return {
+        r: Math.round(r * 255),
+        g: Math.round(g * 255),
+        b: Math.round(b * 255)
+    };
+}
+
+function RGBtoHSV(r, g, b) {
+    if (arguments.length === 1) {
+        g = r.g, b = r.b, r = r.r;
+    }
+    var max = Math.max(r, g, b), min = Math.min(r, g, b),
+        d = max - min,
+        h,
+        s = (max === 0 ? 0 : d / max),
+        v = max / 255;
+
+    switch (max) {
+        case min: h = 0; break;
+        case r: h = (g - b) + d * (g < b ? 6: 0); h /= 6 * d; break;
+        case g: h = (b - r) + d * 2; h /= 6 * d; break;
+        case b: h = (r - g) + d * 4; h /= 6 * d; break;
+    }
+
+    return {
+        h: h,
+        s: s,
+        v: v
+    };
+}
+
+function HSVtoHSL(h, s, v) {
+    if (arguments.length === 1) {
+        s = h.s, v = h.v, h = h.h;
+    }
+    var _h = h,
+        _s = s * v,
+        _l = (2 - s) * v;
+    _s /= (_l <= 1) ? _l : 2 - _l;
+    _l /= 2;
+
+    return {
+        h: _h,
+        s: _s,
+        l: _l
+    };
+}
+
+function HSLtoHSV(h, s, l) {
+    if (arguments.length === 1) {
+        s = h.s, l = h.l, h = h.h;
+    }
+    var _h = h,
+        _s,
+        _v;
+
+    l *= 2;
+    s *= (l <= 1) ? l : 2 - l;
+    _v = (l + s) / 2;
+    _s = (2 * s) / (l + s);
+
+    return {
+        h: _h,
+        s: _s,
+        v: _v
+    };
+}
+</script>
+''', width: 1
+        }
+
+        if( !state.colorIndices?.containsKey(i) ) {
+            if( !state.colorIndices ) {
+                log.debug "Creating colorIndices"
+                state.colorIndices = [(i): []];
+            }
+            else {
+                log.debug "Adding ${i} to colorIndices"
+                state.colorIndices[i] = [];
+            }
+        }
+        else {
+            log.debug "colorIndices is ${state.colorIndices}; colorIndices[${i}] is ${state.colorIndices[i]}"
+        }
+        if( !state.nextColorIndices ) {
+            state.nextColorIndices = [:];
+        }
+
+        log.debug "colorIndices is now ${state.colorIndices}"
+        def colorsForThisHoliday = state.colorIndices[i];
+        log.debug "colorsForThisHoliday ${colorsForThisHoliday}"
+
+        for(int c = 0; c < colorsForThisHoliday.size(); c++) {
+
+            def d = colorsForThisHoliday[c];
+            def inputKey = "holiday${i}Color${d}"
+            def inputId = "settings[${inputKey}]"
+            log.debug "Color ${c+1} is ${settings[inputKey]}"
+
+            // For each existing color slot, display four things:
+            section("Color ${c+1}") {
+
+                // First, the actual ColorMap input for a literal selection
+                // Everything else transfers its value here, but it's hidden.
+                input inputKey, "hidden", title: "", required: true
+
+                // Next, inject a color picker (and its scripts) to help with setting
+                // the map:
+                def pickerId = "colorPicker${d}"
+                paragraph """
+<input type="color" id="${pickerId}" style="width: 95%;" onChange="
+    let mapElement = document.getElementById('settings[holiday${i}Color${d}]');
+    mapElement.value = '';
+    syncColors('colorPicker${d}', 'settings[holiday${i}Color${d}]');
+">
+<script type="text/javascript">
+\$(document).ready(function() {
+syncColors("${pickerId}", "${inputId}");
+})
+</script>
+                """, width: 5
+
+                // Then the preset options
+                paragraph """
+<select name="${presetKey}" id="cars" onChange="
+    let mapElement = document.getElementById('settings[holiday${i}Color${d}]');
+    mapElement.value = this.value;
+    syncColors('colorPicker${d}', 'settings[holiday${i}Color${d}]');">
+${colorOptions}
+</select>
+                """,width: 4
+
+                // And finally a delete button.
+                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
+                input "deleteHoliday${i}Color${d}", "button", title: "${delete} Delete", submitOnChange: true, width: 3
+            }
+        }
+
+        section("") {
+            input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
         }
     }
 }
@@ -453,8 +639,30 @@ private sortHolidays() {
 void appButtonHandler(btn) {
     if( btn.startsWith("deleteHoliday") ) {
         // Extract index
-        def index = Integer.parseInt(btn.minus("deleteHoliday"));
-        DeleteHoliday(index);
+        def parts = btn.minus("deleteHoliday").split("Color")
+        def index = parts[0];
+        if( parts.size() == 1 ) {
+            DeleteHoliday(index);
+        }
+        else {
+            DeleteColor(index, Integer.parseInt(parts[1]));
+        }
+    }
+    else if (btn.startsWith("addColorToHoliday")) {
+        def holidayIndex = btn.minus("addColorToHoliday");
+        def nextColor = state.nextColorIndices[holidayIndex] ?: 0;
+        def indicesForHoliday = state.colorIndices[holidayIndex];
+
+        log.debug "indicesForHoliday is ${indicesForHoliday}"
+        if( indicesForHoliday ) {
+            indicesForHoliday.add(nextColor);
+            state.colorIndices[holidayIndex] = indicesForHoliday;
+        }
+        else {
+            state.colorIndices[holidayIndex] = [nextColor];
+        }
+        log.debug "colorIndices is now ${state.colorIndices}"
+        state.nextColorIndices[holidayIndex] = nextColor + 1;
     }
 }
 
@@ -465,6 +673,11 @@ private DeleteHoliday(int index) {
         app.removeSetting(it);
     }
     state.holidayIndices.removeElement(index);
+}
+
+private DeleteColor(holidayIndex, colorIndex) {
+    app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
+    state.colorIndices[holidayIndex].removeElement(colorIndex);
 }
 
 private StringifyDate(int index) {
@@ -571,26 +784,26 @@ void debug(String msg) {
 ]
 
 @Field static final Map COLORS = [
-    "White": [hueColor: 0, saturation: 0],
-    "Daylight": [hueColor: 53, saturation: 91],
-    "Soft White": [hueColor: 23, saturation: 56],
-    "Warm White": [hueColor: 20, saturation: 80],
-    "Pink": [hueColor: 90.78, saturation: 67.84],
-    "Raspberry": [hueColor: 94, saturation: 100],
-    "Red": [hueColor: 0, saturation: 100],
-    "Brick Red": [hueColor: 4, saturation: 100],
-    "Safety Orange": [hueColor: 7, saturation: 100],
-    "Orange": [hueColor: 10, saturation: 100],
-    "Amber": [hueColor: 13, saturation: 100],
-    "Yellow": [hueColor: 17, saturation: 100],
-    "Green": [hueColor: 33, saturation: 100],
-    "Turquoise": [hueColor: 47, saturation: 100],
-    "Aqua": [hueColor: 50, saturation: 100],
-    "Navy Blue": [hueColor: 61, saturation: 100],
-    "Blue": [hueColor: 65, saturation: 100],
-    "Indigo": [hueColor: 73, saturation: 100],
-    "Purple": [hueColor: 82, saturation: 100],
-    "Custom": null
+    "Choose a Preset": "",
+    "White": [hue: 0, saturation: 0, level: 100],
+    "Magenta": [hue: 82, saturation: 100, level: 100],
+    "Pink": [hue: 90.78, saturation: 67.84, level: 100],
+    "Raspberry": [hue: 94, saturation: 100, level: 100],
+    "Red": [hue: 0, saturation: 100, level: 100],
+    "Brick Red": [hue: 4, saturation: 100, level: 100],
+    "Safety Orange": [hue: 7, saturation: 100, level: 100],
+    "Orange": [hue: 10, saturation: 100, level: 100],
+    "Amber": [hue: 13, saturation: 100, level: 100],
+    "Yellow": [hue: 16, saturation: 100, level: 100],
+    "Pastel Green": [hue: 23, saturation: 56, level: 100],
+    "Green": [hue: 33, saturation: 100, level: 100],
+    "Turquoise": [hue: 47, saturation: 100, level: 100],
+    "Aqua": [hue: 50, saturation: 100, level: 100],
+    "Sky Blue": [hue: 53, saturation: 91, level: 100],
+    "Navy Blue": [hue: 61, saturation: 100, level: 100],
+    "Blue": [hue: 65, saturation: 100, level: 100],
+    "Indigo": [hue: 73, saturation: 100, level: 100],
+    "Purple": [hue: 77, saturation: 100, level: 100]
 ];
 
 
