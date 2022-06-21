@@ -9,7 +9,7 @@ import java.time.Month;
 import java.time.format.DateTimeFormatter;
 import java.time.ZonedDateTime;
 import java.time.LocalDate;
-// Not yet allowed: import static java.time.temporal.TemporalAdjusters.*;
+import static java.time.temporal.TemporalAdjusters.*;
 import java.text.*;
 
 definition (
@@ -140,38 +140,44 @@ Map holidayDefinitions() {
     dynamicPage(name: "holidayDefinitions", title: "Select Holidays to Illuminate") {
         sortHolidays()
         log.debug "Indices are ${state.holidayIndices}"
-        def numHolidays = state.holidayIndices.size();
-        if( numHolidays ) {
-            for( int j = 0; j < numHolidays; j++) {
-                int i = state.holidayIndices[j];
-                def title = "${settings["holiday${i}Name"]}"
-
-                section(hideable: true, hidden: true, title) {
-                    // List colors here!
-                    href(
-                        name: "selectColors${i}",
-                        page: "pageColorSelect",
-                        title: "Edit ${settings["holiday${i}Name"]} colors",
-                        description: "TODO Colors",
-                        params: [holidayIndex: i],
-                        width: 8
-                    )
-                    href(
-                        name: "editHoliday${i}",
-                        page: "pageEditHoliday",
-                        title: "Edit ${settings["holiday${i}Name"]} schedule",
-                        description: StringifyDate(i),
-                        params: [holidayIndex: i],
-                        width: 8
-                    )
-                    def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
-                    input "deleteHoliday${i}", "button", title: "${delete} Delete", submitOnChange: true, width: 4
+        log.debug "Colors are ${state.colorIndices}"
+        state.holidayIndices?.each { i ->
+            def title = "${settings["holiday${i}Name"]}"
+            section(hideable: true, hidden: true, title) {
+                // List colors here!
+                def colorDescription = "No colors yet. Add some!"
+                def colorsForThisHoliday = state.colorIndices["${i}"];
+                log.debug "Colors for ${i} are ${colorsForThisHoliday}"
+                if( colorsForThisHoliday?.size() && colorsForThisHoliday.every {
+                    settings["holiday${i}Color${it}"] != null
+                } ) {
+                    colorDescription = colorsForThisHoliday.collect {
+                        log.debug "Color stored as ${settings["holiday${i}Color${it}"]}"
+                        def colorMap = evaluate(settings["holiday${i}Color${it}"])
+                        log.debug "Color rehydrated as ${colorMap}"
+                        def colorInRGB = HSVtoRGB(colorMap);
+                        "<div style=\"background-color: ${colorInRGB}; padding: 10px; border: 1px solid black; display: inline-block\">&nbsp;</div>"
+                    }.join()
                 }
-            }
-        }
-        else {
-            section("No Holidays configured") {
-                paragraph "You can import holidays or manually add them."
+
+                href(
+                    name: "selectColors${i}",
+                    page: "pageColorSelect",
+                    title: "Edit ${settings["holiday${i}Name"]} colors",
+                    description: colorDescription,
+                    params: [holidayIndex: i],
+                    width: 8
+                )
+                href(
+                    name: "editHoliday${i}",
+                    page: "pageEditHoliday",
+                    title: "Edit ${settings["holiday${i}Name"]} schedule",
+                    description: StringifyDate(i),
+                    params: [holidayIndex: i],
+                    width: 8
+                )
+                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
+                input "deleteHoliday${i}", "button", title: "${delete} Delete", submitOnChange: true, width: 4
             }
         }
 
@@ -372,9 +378,9 @@ function syncColors(pickerId, inputId) {
 
             let hue = parseFloat(hueStr)/100;
             let sat = parseFloat(satStr)/100;
-            let level = parseFloat(levStr)/200;
+            let level = parseFloat(levStr)/100;
 
-            let RGB = HSVtoRGB(HSLtoHSV(hue, sat, level));
+            let RGB = HSVtoRGB(hue, sat, level);
 
             picker.value = "#" + ((1 << 24) + (RGB.r << 16) + (RGB.g << 8) + RGB.b).toString(16).slice(1);
             return;
@@ -391,8 +397,8 @@ function syncColors(pickerId, inputId) {
         g: parseInt(hexString.substring(3, 5), 16),
         b: parseInt(hexString.substring(5, 7), 16)
     };
-    let hsl = HSVtoHSL(RGBtoHSV(rgb));
-    colorMap.value = `[hue:${hsl.h*100}, saturation:${hsl.s*100}, level:${hsl.l*200}]`;
+    let hsv = RGBtoHSV(rgb);
+    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.l*100}]`;
 }
 
 function HSVtoRGB(h, s, v) {
@@ -443,43 +449,6 @@ function RGBtoHSV(r, g, b) {
         v: v
     };
 }
-
-function HSVtoHSL(h, s, v) {
-    if (arguments.length === 1) {
-        s = h.s, v = h.v, h = h.h;
-    }
-    var _h = h,
-        _s = s * v,
-        _l = (2 - s) * v;
-    _s /= (_l <= 1) ? _l : 2 - _l;
-    _l /= 2;
-
-    return {
-        h: _h,
-        s: _s,
-        l: _l
-    };
-}
-
-function HSLtoHSV(h, s, l) {
-    if (arguments.length === 1) {
-        s = h.s, l = h.l, h = h.h;
-    }
-    var _h = h,
-        _s,
-        _v;
-
-    l *= 2;
-    s *= (l <= 1) ? l : 2 - l;
-    _v = (l + s) / 2;
-    _s = (2 * s) / (l + s);
-
-    return {
-        h: _h,
-        s: _s,
-        v: _v
-    };
-}
 </script>
 ''', width: 1
         }
@@ -517,7 +486,7 @@ function HSLtoHSV(h, s, l) {
 
                 // First, the actual ColorMap input for a literal selection
                 // Everything else transfers its value here, but it's hidden.
-                input inputKey, "hidden", title: "", required: true
+                input inputKey, "COLOR_MAP", title: "", required: true
 
                 // Next, inject a color picker (and its scripts) to help with setting
                 // the map:
@@ -531,6 +500,9 @@ function HSLtoHSV(h, s, l) {
 <script type="text/javascript">
 \$(document).ready(function() {
 syncColors("${pickerId}", "${inputId}");
+document.getElementById("${inputId}").addEventListener("change", function () {
+        syncColors("${pickerId}", "${inputId}");
+    });
 })
 </script>
                 """, width: 5
@@ -571,8 +543,8 @@ private holidayDateIsValid(String key) {
 }
 
 private holidayDate(int i, String dateType, int year) {
-    def name = settings["holiday${i}Name}"];
-    log.debug "Finding concrete ${dateType} date for ${name}"
+    def name = settings["holiday${i}Name"];
+    log.debug "Finding concrete ${dateType} date for ${i} (${name})"
     if( dateType == "Start" && !settings["holiday${i}Span"]) {
         // For non-Span holidays, the start date is the day before the end date
         return holidayDate(i, "End", year)?.minusDays(1);
@@ -581,7 +553,7 @@ private holidayDate(int i, String dateType, int year) {
     def key = "holiday${i}${dateType}";
     def type = settings["${key}Type"];
     def month = settings["${key}Month"];
-    def date = settings["${key}Date"];
+    Integer date = settings["${key}Day"];
     def result;
     switch(type) {
         case "fixed":
@@ -616,23 +588,15 @@ private holidayDate(int i, String dateType, int year) {
 }
 
 private sortHolidays() {
-    // For now, this relies on a prohibited function. Don't try to execute until allowed.
-    return;
-
     def thisYear = LocalDate.now().getYear()
     log.debug "Sorting holidays...."
     def originalList = state.holidayIndices
     def sortedList = originalList.collect{
-        [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
+            [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
         }.sort{ a,b ->
-            def endResult = a[2] <=> b[2];
-            if(endResult == 0) {
-                return a[1] <=> b[1];
-            }
-            else {
-                return endResult;
-            }
-        }.collect{it[0]}
+            a[2] <=> b[2] ?: a[1] <=> b[1]
+        }.collect{it[0]};
+    state.holidayIndices = sortedList;
     log.debug "${originalList} became ${sortedList}"
 }
 
@@ -845,17 +809,31 @@ private Map GetDefaultHolidays() {
     ]
 }
 
-// private static weekdayOfMonth(int Y, int M, DayOfWeek day, int number = 1) {
-//     def firstOfMonth = new GregorianCalendar(Y, M, 1);
-//     def firstDayInstance = firstOfMonth.with(TemporalAdjusters.nextOrSame(day));
-//     return firstDayInstance.copyWith(date: firstDayInstance.date + (number - 1) * 7)
-// }
-
-// private static lastWeekdayOfMonth(int Y, int M, DayOfWeek day) {
-//     def firstOfMonth = new GregorianCalendar(Y, M, 1);
-//     def lastOfMonth = firstOfMonth.with(TemporalAdjusters.lastDayOfMonth());
-//     return lastOfMonth.with(TemporalAdjusters.previousOrSame(day));
-// }
+private HSVtoRGB(Map hsv) {
+    float r, g, b, i, f, p, q, t;
+    float s = hsv.saturation / 100;
+    float v = hsv.level / 100;
+    float h = hsv.hue / 100;
+    i = Math.floor(h * 6);
+    f = h * 6 - i;
+    p = v * (1 - s);
+    q = v * (1 - f * s);
+    t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+        case 0: r = v; g = t; b = p; break;
+        case 1: r = q; g = v; b = p; break;
+        case 2: r = p; g = v; b = t; break;
+        case 3: r = p; g = q; b = v; break;
+        case 4: r = t; g = p; b = v; break;
+        case 5: r = v; g = p; b = q; break;
+    }
+    return "#" +
+        [ r, g, b ].collect{
+            def num = (int) Math.round(it * 255);
+            log.debug "${num} becomes ${String.format("%02x", num)}"
+            String.format("%02x", num)
+        }.join();
+}
 
 private static easterForYear(int Y) {
         float A, B, C, P, Q, M, N, D, E;

@@ -15,9 +15,9 @@ function syncColors(pickerId, inputId) {
 
             let hue = parseFloat(hueStr)/100;
             let sat = parseFloat(satStr)/100;
-            let level = parseFloat(levStr)/200;
+            let level = parseFloat(levStr)/100;
 
-            let RGB = HSVtoRGB(HSLtoHSV(hue, sat, level));
+            let RGB = HSVtoRGB(hue, sat, level);
 
             picker.value = "#" + ((1 << 24) + (RGB.r << 16) + (RGB.g << 8) + RGB.b).toString(16).slice(1);
             return;
@@ -37,8 +37,8 @@ function syncColors(pickerId, inputId) {
         g: parseInt(hex.substring(3, 5), 16),
         b: parseInt(hex.substring(5, 7), 16)
     }
-    let hsl = HSVtoHSL(RGBtoHSV(rgb));
-    colorMap.value = `[hue:${hsl.h*100}, saturation:${hsl.s*100}, level:${hsl.l*200}]`;
+    let hsv = RGBtoHSV(rgb);
+    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.l*100}]`;
 }
 
 function pickerChange(num){
@@ -103,6 +103,7 @@ function HSVtoHSL(h, s, v) {
         _s = s * v,
         _l = (2 - s) * v;
     _s /= (_l <= 1) ? _l : 2 - _l;
+    _s = _s ? _s : 0;
     _l /= 2;
 
     return {
@@ -124,6 +125,7 @@ function HSLtoHSV(h, s, l) {
     s *= (l <= 1) ? l : 2 - l;
     _v = (l + s) / 2;
     _s = (2 * s) / (l + s);
+    _s = _s ? _s : 0;
 
     return {
         h: _h,
