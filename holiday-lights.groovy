@@ -139,9 +139,14 @@ Map deviceSelection() {
 Map holidayDefinitions() {
     dynamicPage(name: "holidayDefinitions", title: "Select Holidays to Illuminate") {
         sortHolidays()
-        log.debug "Indices are ${state.holidayIndices}"
-        log.debug "Colors are ${state.colorIndices}"
-        state.holidayIndices?.each { i ->
+        if( !state.colorIndices ) {
+            log.debug "Creating colorIndices"
+            state.colorIndices = [:];
+        }
+
+        log.debug "Indices are ${state.holidayIndices.inspect()}"
+        log.debug "Colors are ${state.colorIndices.inspect()}"
+        state.holidayIndices?.each { int i ->
             def title = "${settings["holiday${i}Name"]}"
             section(hideable: true, hidden: true, title) {
                 // List colors here!
@@ -262,21 +267,21 @@ Map pageImport() {
                                 colorSettings["type"] != STATIC || colorSettings["colors"]?.size() > 1);
                             app.updateSetting("holiday${i}Rotation", colorSettings["type"]);
                             colorSettings["colors"].each {
-                                def idToImport = AddColorToHoliday("${i}");
+                                def idToImport = AddColorToHoliday(i);
                                 app.updateSetting("holiday${i}Color${idToImport}", it.toString());
                             }
                             def indices = state.holidayIndices;
                             indices.add(i);
                             state.holidayIndices = indices;
                             state.nextHolidayIndex += 1;
-                            alreadyImported["${i}"] = source["id"];
+                            alreadyImported[i] = source["id"];
                             paragraph "Imported ${source.name}"
                         }
                     }
                     paragraph "Finished importing ${list}!"
                 }
                 catch( Exception ex) {
-                    log.debug ex
+                    log.error "${ex} at ${ex.getStackTrace()}"
                     paragraph "Importing failed!"
                 }
             }
@@ -355,9 +360,9 @@ def pageEditHoliday(params) {
 }
 
 def pageColorSelect(params) {
-    def i;
+    int i;
     if( params?.holidayIndex != null ) {
-        i = params.holidayIndex.toString()
+        i = params.holidayIndex
         state.editingHolidayIndex = i
     }
     else {
@@ -478,25 +483,16 @@ function RGBtoHSV(r, g, b) {
         }
 
         if( !state.colorIndices?.containsKey(i) ) {
-            if( !state.colorIndices ) {
-                log.debug "Creating colorIndices"
-                state.colorIndices = [(i): []];
-            }
-            else {
-                log.debug "Adding ${i} to colorIndices"
-                state.colorIndices[i] = [];
-            }
+            log.debug "Adding ${i} to colorIndices"
+            state.colorIndices["${i}"] = [];
         }
         else {
-            log.debug "colorIndices is ${state.colorIndices}; colorIndices[${i}] is ${state.colorIndices[i]}"
-        }
-        if( !state.nextColorIndices ) {
-            state.nextColorIndices = [:];
+            log.debug "colorIndices is ${state.colorIndices.inspect()}; colorIndices[${i}] is ${state.colorIndices["${i}"].inspect()}"
         }
 
-        log.debug "colorIndices is now ${state.colorIndices}"
-        def colorsForThisHoliday = state.colorIndices[i];
-        log.debug "colorsForThisHoliday ${colorsForThisHoliday}"
+        log.debug "colorIndices is now ${state.colorIndices.inspect()}"
+        def colorsForThisHoliday = state.colorIndices["${i}"];
+        log.debug "colorsForThisHoliday ${colorsForThisHoliday.inspect()}"
 
         for(int c = 0; c < colorsForThisHoliday.size(); c++) {
 
@@ -509,7 +505,7 @@ function RGBtoHSV(r, g, b) {
             section("Color ${c+1}") {
 
                 // First, the actual ColorMap input for a literal selection
-                // Everything else transfers its value here, but it's hidden.
+                // Everything else transfers its value here.
                 input inputKey, "COLOR_MAP", title: "", required: true
 
                 // Next, inject a color picker (and its scripts) to help with setting
@@ -637,25 +633,29 @@ void appButtonHandler(btn) {
         }
     }
     else if (btn.startsWith("addColorToHoliday")) {
-        def holidayIndex = btn.minus("addColorToHoliday");
+        def holidayIndex = Integer.parseInt(btn.minus("addColorToHoliday"));
         AddColorToHoliday(holidayIndex);
     }
 }
 
-private AddColorToHoliday(String holidayIndex) {
-    def nextColor = state.nextColorIndices[holidayIndex] ?: 0;
-    def indicesForHoliday = state.colorIndices[holidayIndex];
+private AddColorToHoliday(int holidayIndex) {
+    if( !state.nextColorIndices ) {
+        state.nextColorIndices = [:];
+    }
 
-    log.debug "indicesForHoliday is ${indicesForHoliday}"
+    def nextColor = state.nextColorIndices["${holidayIndex}"] ?: 0;
+    def indicesForHoliday = state.colorIndices["${holidayIndex}"];
+
+    log.debug "indicesForHoliday is ${indicesForHoliday.inspect()}"
     if( indicesForHoliday ) {
         indicesForHoliday.add(nextColor);
-        state.colorIndices[holidayIndex] = indicesForHoliday;
+        state.colorIndices["${holidayIndex}"] = indicesForHoliday;
     }
     else {
-        state.colorIndices[holidayIndex] = [nextColor];
+        state.colorIndices["${holidayIndex}"] = [nextColor];
     }
-    log.debug "colorIndices is now ${state.colorIndices}"
-    state.nextColorIndices[holidayIndex] = nextColor + 1;
+    log.debug "colorIndices is now ${state.colorIndices.inspect()}"
+    state.nextColorIndices["${holidayIndex}"] = nextColor + 1;
     return nextColor;
 }
 
@@ -670,7 +670,7 @@ private DeleteHoliday(int index) {
     state.imported.remove("${index}");
 }
 
-private DeleteColor(holidayIndex, colorIndex) {
+private DeleteColor(int holidayIndex, int colorIndex) {
     app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
     state.colorIndices["${holidayIndex}"].removeElement(colorIndex);
 }
@@ -867,7 +867,7 @@ private Map GetDefaultHolidays() {
     return indices.collectEntries{
         [it.key, it.value.collect{
             def holiday = GetHolidayByID(it);
-            holiday["id"] = "${it}";
+            holiday["id"] = it;
             holiday
         }]
     }
