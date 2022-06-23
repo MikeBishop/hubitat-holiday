@@ -153,9 +153,15 @@ Map holidayDefinitions() {
                 } ) {
                     colorDescription = colorsForThisHoliday.collect {
                         log.debug "Color stored as ${settings["holiday${i}Color${it}"]}"
-                        def colorMap = evaluate(settings["holiday${i}Color${it}"])
+                        def colorMap;
+                        try {
+                            colorMap = evaluate(settings["holiday${i}Color${it}"].toString());
+                        }
+                        catch (Exception ex) {
+                            log.debug "Rehydration failed with ${ex}"
+                        }
                         log.debug "Color rehydrated as ${colorMap}"
-                        def colorInRGB = HSVtoRGB(colorMap);
+                        def colorInRGB = HSVtoRGB(colorMap) ?: "#000000";
                         "<div style=\"background-color: ${colorInRGB}; padding: 10px; border: 1px solid black; display: inline-block\">&nbsp;</div>"
                     }.join()
                 }
@@ -208,10 +214,10 @@ Map holidayDefinitions() {
 Map pageImport() {
     dynamicPage(name: "pageImport", title: "Holiday Import progress") {
         importSelected.each {
+            def alreadyImported = state.imported ?: [:];
             def list = it
             section("Importing ${list}...") {
                 try {
-                    // Add holidays to list; TODO: only if not already present
                     def holidaysToImport = GetDefaultHolidays()[list];
                     log.debug "Plan to import ${holidaysToImport.size()} from ${holidaysToImport}"
                     holidaysToImport.each {
@@ -219,36 +225,53 @@ Map pageImport() {
                         def i = state.nextHolidayIndex;
                         def source = it;
                         log.debug "Attempting ${source.name}"
-                        app.updateSetting("holiday${i}Name", source.name)
-                        app.updateSetting("holiday${i}Span", source.startDate != null)
-                        ["Start", "End"].each {
-                            def key = it.toLowerCase() + "Date"
-                            if( source[key] ) {
-                                app.updateSetting("holiday${i}${it}Type", source[key].type)
-                                if( source[key].type != "special" ) {
-                                    if( source[key].type == "ordinal" ) {
-                                        log.debug "Ordinal, ${source[key].ordinal} ${source[key].weekday.toString()} of ${source[key].month.toString()}"
-                                        app.updateSetting("holiday${i}${it}Ordinal", source[key].ordinal.toString())
-                                        app.updateSetting("holiday${i}${it}Weekday", source[key].weekday.toString())
+                        def importSearch = alreadyImported.find{ it.value == source["id"] &&
+                                state.holidayIndices.contains(Integer.parseInt(it.key)) }
+                        if( importSearch ) {
+                            log.debug "${source.name} already exists at index ${importSearch.key}"
+                            paragraph "${source.name} already imported; skipping"
+                        }
+                        else {
+                            app.updateSetting("holiday${i}Name", source.name)
+                            app.updateSetting("holiday${i}Span", source.startDate != null)
+                            ["Start", "End"].each {
+                                def key = it.toLowerCase() + "Date"
+                                if( source[key] ) {
+                                    app.updateSetting("holiday${i}${it}Type", source[key].type)
+                                    if( source[key].type != SPECIAL ) {
+                                        if( source[key].type == ORDINAL ) {
+                                            log.debug "Ordinal, ${source[key].ordinal} ${source[key].weekday.toString()} of ${source[key].month.toString()}"
+                                            app.updateSetting("holiday${i}${it}Ordinal", source[key].ordinal.toString())
+                                            app.updateSetting("holiday${i}${it}Weekday", source[key].weekday.toString())
+                                        }
+                                        else {
+                                            //Fixed
+                                            log.debug "Fixed, ${source[key].month.toString()} ${source[key].day}"
+                                            app.updateSetting("holiday${i}${it}Day", source[key].day)
+                                        }
+                                        app.updateSetting("holiday${i}${it}Month", source[key].month.toString())
                                     }
                                     else {
-                                        //Fixed
-                                        log.debug "Fixed, ${source[key].month.toString()} ${source[key].day}"
-                                        app.updateSetting("holiday${i}${it}Day", source[key].day)
+                                        app.updateSetting("holiday${i}${it}Special", source[key].special)
                                     }
-                                    app.updateSetting("holiday${i}${it}Month", source[key].month.toString())
+                                    app.updateSetting("holiday${i}${it}Offset", source[key].offset ?: 0)
                                 }
-                                else {
-                                    app.updateSetting("holiday${i}${it}Special", source[key].special)
-                                }
-                                app.updateSetting("holiday${i}${it}Offset", source[key].offset ?: 0)
                             }
+                            def colorSettings = source["settings"];
+                            app.updateSetting("holiday${i}Alignment",
+                                colorSettings["type"] != STATIC || colorSettings["colors"]?.size() > 1);
+                            app.updateSetting("holiday${i}Rotation", colorSettings["type"]);
+                            colorSettings["colors"].each {
+                                def idToImport = AddColorToHoliday("${i}");
+                                app.updateSetting("holiday${i}Color${idToImport}", it.toString());
+                            }
+                            def indices = state.holidayIndices;
+                            indices.add(i);
+                            state.holidayIndices = indices;
+                            state.nextHolidayIndex += 1;
+                            alreadyImported["${i}"] = source["id"];
+                            paragraph "Imported ${source.name}"
                         }
-                        def indices = state.holidayIndices;
-                        indices.add(i);
-                        state.holidayIndices = indices;
-                        state.nextHolidayIndex += 1;
-                        paragraph "Imported ${source.name}"
                     }
                     paragraph "Finished importing ${list}!"
                 }
@@ -257,6 +280,7 @@ Map pageImport() {
                     paragraph "Importing failed!"
                 }
             }
+            state.imported = alreadyImported;
         }
         app.clearSetting("importSelected")
     }
@@ -301,12 +325,12 @@ def pageEditHoliday(params) {
             section("${settings["holiday${i}Span"] ? it : "Select"} date") {
                 log.debug "date is ${date}"
                 input "holiday${i}${date}Type", "enum", title: "Type of Schedule", multiple: false, options: [
-                    "fixed": "Fixed date",
-                    "ordinal": "Fixed weekday",
-                    "special": "Special days"
+                    (FIXED): "Fixed date",
+                    (ORDINAL): "Fixed weekday",
+                    (SPECIAL): "Special days"
                 ], submitOnChange: true, required: true
-                if( settings["holiday${i}${date}Type"] in ["ordinal", "fixed"] ) {
-                    if( settings["holiday${i}${date}Type"] == "ordinal" ) {
+                if( settings["holiday${i}${date}Type"] in [ORDINAL, FIXED] ) {
+                    if( settings["holiday${i}${date}Type"] == ORDINAL ) {
                         input "holiday${i}${date}Ordinal", "enum", title: "Which week?",
                             options: ORDINALS, required: true, submitOnChange: true
                         input "holiday${i}${date}Weekday", "enum", title: "Which day?",
@@ -315,13 +339,13 @@ def pageEditHoliday(params) {
                     }
                     input "holiday${i}${date}Month", "enum", title: "Month", options: monthOptions,
                         submitOnChange: true, width: 5, required: true
-                    if( settings["holiday${i}${date}Type"] == "fixed" && settings["holiday${i}${date}Month"] ) {
+                    if( settings["holiday${i}${date}Type"] == FIXED && settings["holiday${i}${date}Month"] ) {
                         def numDays = Month.valueOf(unarray(settings["holiday${i}${date}Month"])).length(true)
                         input "holiday${i}${date}Day", "number", title: "Date", range:"1..${numDays}",
                             width: 5, required: true, submitOnChange: true
                     }
                 }
-                else if (settings["holiday${i}${date}Type"] == "special" ) {
+                else if (settings["holiday${i}${date}Type"] == SPECIAL ) {
                     input "holiday${i}${date}Special", "enum", options: SPECIALS, required: true, submitOnChange: true
                 }
                 input "holiday${i}${date}Offset", "number", title: "Offset (optional)", range:"-60..60"
@@ -351,11 +375,11 @@ def pageColorSelect(params) {
                 width: 5, submitOnChange: true, defaultValue: true
             input "holiday${i}Rotation", "enum", title: "How to rotate colors",
                 width: 5, options: [
-                    random: "Random",
-                    fixed:  "Static",
-                    parade: "Sequential"
+                    (RANDOM): "Random",
+                    (STATIC):  "Static",
+                    (SEQUENTIAL): "Sequential"
                 ], submitOnChange: true
-            if( !settings["holiday${i}Alignment"] && settings["holiday${i}Rotation"] == "Static") {
+            if( !settings["holiday${i}Alignment"] && settings["holiday${i}Rotation"] == STATIC) {
                 paragraph "Note: With this combination, only the first color will ever be used!"
             }
             paragraph '''
@@ -398,7 +422,7 @@ function syncColors(pickerId, inputId) {
         b: parseInt(hexString.substring(5, 7), 16)
     };
     let hsv = RGBtoHSV(rgb);
-    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.l*100}]`;
+    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.v*100}]`;
 }
 
 function HSVtoRGB(h, s, v) {
@@ -535,16 +559,16 @@ private holidayIsValid(int i) {
 }
 
 private holidayDateIsValid(String key) {
-    return settings["${key}Type"] in ["ordinal", "fixed", "special"] && (
-            (settings["${key}Type"] == "ordinal" && settings["${key}Ordinal"] && settings["${key}Weekday"] ) ||
-            (settings["${key}Type"] == "fixed" && settings["${key}Day"]) ||
-            (settings["${key}Type"] == "special" && settings["${key}Special"] in SPECIALS.keySet())
-        ) && (settings["${key}Type"] == "special" || settings["${key}Month"] != null)
+    return settings["${key}Type"] in [ORDINAL, FIXED, SPECIAL] && (
+            (settings["${key}Type"] == ORDINAL && settings["${key}Ordinal"] && settings["${key}Weekday"] ) ||
+            (settings["${key}Type"] == FIXED && settings["${key}Day"]) ||
+            (settings["${key}Type"] == SPECIAL && settings["${key}Special"] in SPECIALS.keySet())
+        ) && (settings["${key}Type"] == SPECIAL || settings["${key}Month"] != null)
 }
 
 private holidayDate(int i, String dateType, int year) {
     def name = settings["holiday${i}Name"];
-    log.debug "Finding concrete ${dateType} date for ${i} (${name})"
+    // log.debug "Finding concrete ${dateType} date for ${i} (${name})"
     if( dateType == "Start" && !settings["holiday${i}Span"]) {
         // For non-Span holidays, the start date is the day before the end date
         return holidayDate(i, "End", year)?.minusDays(1);
@@ -556,18 +580,18 @@ private holidayDate(int i, String dateType, int year) {
     Integer date = settings["${key}Day"];
     def result;
     switch(type) {
-        case "fixed":
-            log.debug "Fixed ${year}, ${month}, ${date}"
+        case FIXED:
+            // log.debug "Fixed ${year}, ${month}, ${date}"
             result = LocalDate.of(year, Month.valueOf(month), date);
             break;
-        case "ordinal":
+        case ORDINAL:
             def ordinal = settings["${key}Ordinal"]
             def weekday = settings["${key}Weekday"]
-            log.debug "Ordinal ${year}, ${month}, ${ordinal}, ${weekday}"
+            // log.debug "Ordinal ${year}, ${month}, ${ordinal}, ${weekday}"
             result = LocalDate.of(year, Month.valueOf(month), 15).
                 with(dayOfWeekInMonth(Integer.parseInt(ordinal), DayOfWeek.valueOf(weekday)));
             break;
-        case "special":
+        case SPECIAL:
             def special = settings["${key}Special"];
             switch(special) {
                 case "easter":
@@ -604,7 +628,7 @@ void appButtonHandler(btn) {
     if( btn.startsWith("deleteHoliday") ) {
         // Extract index
         def parts = btn.minus("deleteHoliday").split("Color")
-        def index = parts[0];
+        def index = Integer.parseInt(parts[0]);
         if( parts.size() == 1 ) {
             DeleteHoliday(index);
         }
@@ -614,20 +638,25 @@ void appButtonHandler(btn) {
     }
     else if (btn.startsWith("addColorToHoliday")) {
         def holidayIndex = btn.minus("addColorToHoliday");
-        def nextColor = state.nextColorIndices[holidayIndex] ?: 0;
-        def indicesForHoliday = state.colorIndices[holidayIndex];
-
-        log.debug "indicesForHoliday is ${indicesForHoliday}"
-        if( indicesForHoliday ) {
-            indicesForHoliday.add(nextColor);
-            state.colorIndices[holidayIndex] = indicesForHoliday;
-        }
-        else {
-            state.colorIndices[holidayIndex] = [nextColor];
-        }
-        log.debug "colorIndices is now ${state.colorIndices}"
-        state.nextColorIndices[holidayIndex] = nextColor + 1;
+        AddColorToHoliday(holidayIndex);
     }
+}
+
+private AddColorToHoliday(String holidayIndex) {
+    def nextColor = state.nextColorIndices[holidayIndex] ?: 0;
+    def indicesForHoliday = state.colorIndices[holidayIndex];
+
+    log.debug "indicesForHoliday is ${indicesForHoliday}"
+    if( indicesForHoliday ) {
+        indicesForHoliday.add(nextColor);
+        state.colorIndices[holidayIndex] = indicesForHoliday;
+    }
+    else {
+        state.colorIndices[holidayIndex] = [nextColor];
+    }
+    log.debug "colorIndices is now ${state.colorIndices}"
+    state.nextColorIndices[holidayIndex] = nextColor + 1;
+    return nextColor;
 }
 
 private DeleteHoliday(int index) {
@@ -637,11 +666,13 @@ private DeleteHoliday(int index) {
         app.removeSetting(it);
     }
     state.holidayIndices.removeElement(index);
+    state.colorIndices.remove("${index}");
+    state.imported.remove("${index}");
 }
 
 private DeleteColor(holidayIndex, colorIndex) {
     app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
-    state.colorIndices[holidayIndex].removeElement(colorIndex);
+    state.colorIndices["${holidayIndex}"].removeElement(colorIndex);
 }
 
 private StringifyDate(int index) {
@@ -653,7 +684,7 @@ private StringifyDate(int index) {
     dates.collect {
         try {
             def result = ""
-            if( settings["holiday${index}${it}Type"] != "special" ) {
+            if( settings["holiday${index}${it}Type"] != SPECIAL ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
                 log.debug "Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}"
                 def monthEnum = unarray(settings["holiday${index}${it}Month"]);
@@ -669,7 +700,7 @@ private StringifyDate(int index) {
                     result += "${absOffset} day${absOffset > 1 ? "s" : ""} ${offset > 0 ? "after" : "before"} "
                 }
 
-                if( settings["holiday${index}${it}Type"] == "ordinal" ) {
+                if( settings["holiday${index}${it}Type"] == ORDINAL ) {
                     def ordinal = unarray(settings["holiday${index}${it}Ordinal"]);
                     log.debug "Ordinal is ${ordinal} -> ${ORDINALS[ordinal]}"
                     result += "${ORDINALS[ordinal]} ";
@@ -770,35 +801,61 @@ void debug(String msg) {
     "Purple": [hue: 77, saturation: 100, level: 100]
 ];
 
+@Field static final String STATIC = "static";
+@Field static final String RANDOM = "random";
+@Field static final String SEQUENTIAL = "sequential";
 
-// [name: "", startDate: {year -> }, colors: []]
-// or [name: "", startDate: {year -> }, endDate: {year -> } colors: []]
-private Map GetDefaultHolidays() {
-    final List RedWhiteAndBlue = [COLORS["Red"], COLORS["White"], COLORS["Blue"]];
-    return [
-        "United States": [
-            [name: "Presidents Day", endDate: [type: "ordinal", month: Month.FEBRUARY, weekday: DayOfWeek.MONDAY, ordinal: 3], colors: RedWhiteAndBlue],
-            [name: "St. Patrick's Day", endDate: [type: "fixed", month: Month.MARCH, day: 17], colors: [COLORS["Green"]]],
-            [name: "Memorial Day", endDate: [type: "ordinal", month: Month.MAY, weekday: DayOfWeek.MONDAY, ordinal: -1], colors: RedWhiteAndBlue],
-            [name: "Pride Month", startDate: [type: "fixed", month: Month.JUNE, day: 1],
-                endDate: [type: "fixed", month: Month.JUNE, day: 30],
+@Field static final String ORDINAL = "ordinal";
+@Field static final String FIXED = "fixed";
+@Field static final String SPECIAL = "special";
+
+private Map GetHolidayByID(int id) {
+    final Map RedWhiteAndBlue = [type: RANDOM, colors:[COLORS["Red"], COLORS["White"], COLORS["Blue"]]];
+    final List MasterHolidayList = [
+        // 0
+        [name: "Presidents Day", endDate: [type: ORDINAL, month: Month.FEBRUARY, weekday: DayOfWeek.MONDAY, ordinal: 3], settings: RedWhiteAndBlue],
+        // 1
+        [name: "St. Patrick's Day", endDate: [type: FIXED, month: Month.MARCH, day: 17], settings: [ type: STATIC, colors: [COLORS["Green"]]]],
+        // 2
+        [name: "Memorial Day", endDate: [type: ORDINAL, month: Month.MAY, weekday: DayOfWeek.MONDAY, ordinal: -1], settings: RedWhiteAndBlue],
+        // 3
+        [name: "Pride Month", startDate: [type: FIXED, month: Month.JUNE, day: 1],
+            endDate: [type: FIXED, month: Month.JUNE, day: 30],
+            settings: [ type: SEQUENTIAL,
                 colors: [COLORS["Red"], COLORS["Orange"], COLORS["Yellow"],
                         COLORS["Green"], COLORS["Indigo"], COLORS["Purple"]]
-            ],
-            [name: "Juneteenth", endDate: [type: "fixed", month: Month.JUNE, day: 19], colors: RedWhiteAndBlue],
-            [name: "Independence Day", endDate: [type: "fixed", month: Month.JULY, day: 4], colors: RedWhiteAndBlue],
-            [name: "Labor Day", endDate: [type: "ordinal", month: Month.SEPTEMBER, weekday: DayOfWeek.MONDAY, ordinal: 1], colors: RedWhiteAndBlue],
-            [name: "Veterans Day", endDate: [type: "fixed", month: Month.OCTOBER, day: 11], colors: RedWhiteAndBlue],
-            [name: "Halloween", endDate: [type: "fixed", month: Month.OCTOBER, day: 31],
-                colors: [COLORS["Orange"], COLORS["Indigo"]]],
-            [name: "Thanksgiving Day", endDate: [type: "ordinal", month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4],
-                colors: [COLORS["Orange"], COLORS["White"]]],
-            [name: "Christmas", startDate: [type: "ordinal", month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4, offset: 1],
-                endDate: [type: "fixed", month: Month.DECEMBER, day: 26],
-                colors: [COLORS["Red"], COLORS["Green"]]]
+            ]
+        ],
+        // 4
+        [name: "Juneteenth", endDate: [type: FIXED, month: Month.JUNE, day: 19], settings: RedWhiteAndBlue],
+        // 5
+        [name: "Independence Day", endDate: [type: FIXED, month: Month.JULY, day: 4], settings: RedWhiteAndBlue],
+        // 6
+        [name: "Labor Day", endDate: [type: ORDINAL, month: Month.SEPTEMBER, weekday: DayOfWeek.MONDAY, ordinal: 1], settings: RedWhiteAndBlue],
+        // 7
+        [name: "Veterans Day", endDate: [type: FIXED, month: Month.OCTOBER, day: 11], settings: RedWhiteAndBlue],
+        // 8
+        [name: "Halloween", endDate: [type: FIXED, month: Month.OCTOBER, day: 31], settings: [ type: STATIC,
+            colors: [COLORS["Orange"], COLORS["Indigo"]]]],
+        // 9
+        [name: "Thanksgiving Day", endDate: [type: ORDINAL, month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4],
+            settings: [ type: STATIC, colors: [COLORS["Orange"], COLORS["White"]]]],
+        // 10
+        [name: "Christmas", startDate: [type: ORDINAL, month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4, offset: 1],
+            endDate: [type: FIXED, month: Month.DECEMBER, day: 26],
+            settings: [ type: RANDOM, colors: [COLORS["Red"], COLORS["Green"]]]]
+    ];
+    return MasterHolidayList[id];
+}
+
+
+private Map GetDefaultHolidays() {
+    final Map indices = [
+        "United States": [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
         ],
         "Christian": [
-
+            10,
         ],
         "Jewish": [
 
@@ -806,14 +863,21 @@ private Map GetDefaultHolidays() {
         "Satanic Temple": [
 
         ]
-    ]
+    ];
+    return indices.collectEntries{
+        [it.key, it.value.collect{
+            def holiday = GetHolidayByID(it);
+            holiday["id"] = "${it}";
+            holiday
+        }]
+    }
 }
 
 private HSVtoRGB(Map hsv) {
     float r, g, b, i, f, p, q, t;
-    float s = hsv.saturation / 100;
-    float v = hsv.level / 100;
-    float h = hsv.hue / 100;
+    float s = ( hsv?.saturation ?: 0 ) / 100;
+    float v = ( hsv?.level ?: 0 ) / 100;
+    float h = ( hsv?.hue ?: 0 ) / 100;
     i = Math.floor(h * 6);
     f = h * 6 - i;
     p = v * (1 - s);

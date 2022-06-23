@@ -38,7 +38,7 @@ function syncColors(pickerId, inputId) {
         b: parseInt(hex.substring(5, 7), 16)
     }
     let hsv = RGBtoHSV(rgb);
-    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.l*100}]`;
+    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.v*100}]`;
 }
 
 function pickerChange(num){
