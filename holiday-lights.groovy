@@ -27,6 +27,7 @@ preferences {
     page(name: "pageEditHoliday")
     page(name: "pageImport")
     page(name: "pageColorSelect")
+    page(name: "illuminationConfig")
 }
 
 Map mainPage() {
@@ -45,44 +46,27 @@ Map mainPage() {
 				    60: "1 hour",
 				    180: "3 hours"
                 ]
-            final Map TIME_OPTIONS = [
-                sunrise: "Sunrise",
-                sunset:  "Sunset",
-                custom:  "A specific time..."
-            ];
-            input "startTime", "enum", title: "Start lights at...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            input "stopTime", "enum", title: "Stop lights at...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            if( settings["startTime"] == "custom" ) {
-                input "startTimeCustom", "time", title: "Specify start time:"
-            }
-            if( settings["stopTime"] == "custom" ) {
-                input "stopTimeCustom", "time", title: "Specify stop time:"
-            }
 
-            def descr = "Choose which devices to automate"
-            if(settings["device0"]) {
-                descr = "";
-                for(int index = 0; settings["device${index}"]; index++) {
-                    def device = settings["device${index}"]
-                    if( index > 0 ) {
-                        descr += ", "
-                    }
-                    descr += device.getLabel() ?: device.getName()
-                }
-                descr += " selected"
+            def descr = "Choose which RGB/RGB bulbs to use"
+            def deviceIndices = state.deviceIndices;
+            if(deviceIndices.size()) {
+                descr = "${deviceIndices.size()} devices selected"
             }
             href(
                 name: "deviceSelectionHref",
                 page: "deviceSelection",
-                title: "Device Selection",
+                title: "RGB Device Selection",
                 description: descr
+            )
+            href(
+                name: "illuminationConfigHref",
+                page: "illuminationConfig",
+                title: "Non-Holiday Illumination",
             )
             href(
                 name: "holidaySelectionHref",
                 page: "holidayDefinitions",
-                title: "Holiday Scheduling",
+                title: "Holiday Displays",
             )
 
         }
@@ -126,22 +110,39 @@ Map deviceSelection() {
                     multiple: false, submitOnChange: true
             }
         }
-        section("Triggers for Illumination") {
-            paragraph "These devices will cause the bulbs to switch to white light temporarily, regardless of holiday settings"
-            input "motionTriggers", "capability.motionSensor", title: "Motion sensors", multiple: true
-            input "contactTriggers", "capability.contactSensor", title: "Contact sensors", multiple: true
-            input "switchTriggers", "capability.switch", title: "Switches", multiple: true
-            input "duration", "int", title: "How long to stay illuminated?"
-        }
     }
 }
 
 Map holidayDefinitions() {
-    dynamicPage(name: "holidayDefinitions", title: "Select Holidays to Illuminate") {
+    dynamicPage(name: "holidayDefinitions", title: "Configure Holiday Displays") {
         sortHolidays()
         if( !state.colorIndices ) {
             log.debug "Creating colorIndices"
             state.colorIndices = [:];
+        }
+
+        section("Devices and Times") {
+            input "holidayStartTime", "enum", title: "Start holiday lights at...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            input "holidayStopTime", "enum", title: "Stop holiday lights at...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            if( startTime == CUSTOM || stopTime == CUSTOM ) {
+                if( startTime == CUSTOM ) {
+                    input "startTimeCustom", "time", title: "Specify start time:",
+                    width: 6
+                }
+                else {
+                    paragraph "", width: 6
+                }
+                if( stopTime == CUSTOM ) {
+                    input "stopTimeCustom", "time", title: "Specify stop time:", width: 6
+                }
+                else {
+                    paragraph "", width: 6
+                }
+            }
+            input "switchesForHoliday", "capability.switch", multiple: true,
+                title: "Other switches to turn on when holiday lights are active"
         }
 
         log.debug "Indices are ${state.holidayIndices.inspect()}"
@@ -370,9 +371,6 @@ def pageColorSelect(params) {
         log.warn "Unexpected contents of params: ${params}"
     }
 
-    def colorOptions = COLORS.
-        collect{ "<option value=\"${it.value}\">${it.key}</option>" }.
-        join("\n")
     def name = settings["holiday${i}Name"] ?: "New Holiday"
     dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
         section("Display Options") {
@@ -387,7 +385,42 @@ def pageColorSelect(params) {
             if( !settings["holiday${i}Alignment"] && settings["holiday${i}Rotation"] == STATIC) {
                 paragraph "Note: With this combination, only the first color will ever be used!"
             }
-            paragraph '''
+            paragraph PICKER_JS, width: 1
+        }
+
+
+        log.debug "colorIndices is now ${state.colorIndices.inspect()}"
+        def colorsForThisHoliday = state.colorIndices["${i}"];
+        if( !colorsForThisHoliday ) {
+            colorsForThisHoliday = [];
+            state.colorIndices["${i}"] = colorsForThisHoliday;
+        }
+        log.debug "colorsForThisHoliday ${colorsForThisHoliday.inspect()}"
+
+        colorsForThisHoliday.eachWithIndex { color, index ->
+
+            def inputKey = "holiday${i}Color${color}"
+            log.debug "Color ${index+1} is ${settings[inputKey]}"
+
+            // For each existing color slot, display four things:
+            section("Color ${index+1}") {
+
+                // Map, picker, and presets displayed here
+                drawPicker(inputKey, color);
+
+                // And finally a delete button.
+                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
+                input "deleteHoliday${i}Color${color}", "button", title: "${delete} Delete", submitOnChange: true, width: 3
+            }
+        }
+
+        section("") {
+            input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
+        }
+    }
+}
+
+@Field final static String PICKER_JS = '''
 <script type="text/javascript">
 function syncColors(pickerId, inputId) {
     debugger;
@@ -479,43 +512,26 @@ function RGBtoHSV(r, g, b) {
     };
 }
 </script>
-''', width: 1
-        }
+''';
 
-        if( !state.colorIndices?.containsKey(i) ) {
-            log.debug "Adding ${i} to colorIndices"
-            state.colorIndices["${i}"] = [];
-        }
-        else {
-            log.debug "colorIndices is ${state.colorIndices.inspect()}; colorIndices[${i}] is ${state.colorIndices["${i}"].inspect()}"
-        }
+private drawPicker(inputKey, pickerSuffix = "") {
+    def inputId = "settings[${inputKey}]";
+    def colorOptions = COLORS.
+        collect{ "<option value=\"${it.value}\">${it.key}</option>" }.
+        join("\n");
 
-        log.debug "colorIndices is now ${state.colorIndices.inspect()}"
-        def colorsForThisHoliday = state.colorIndices["${i}"];
-        log.debug "colorsForThisHoliday ${colorsForThisHoliday.inspect()}"
+    // First, the actual ColorMap input for a literal selection
+    // Everything else transfers its value here.
+    input inputKey, "COLOR_MAP", title: "", required: true, defaultValue: COLORS["White"]
 
-        for(int c = 0; c < colorsForThisHoliday.size(); c++) {
-
-            def d = colorsForThisHoliday[c];
-            def inputKey = "holiday${i}Color${d}"
-            def inputId = "settings[${inputKey}]"
-            log.debug "Color ${c+1} is ${settings[inputKey]}"
-
-            // For each existing color slot, display four things:
-            section("Color ${c+1}") {
-
-                // First, the actual ColorMap input for a literal selection
-                // Everything else transfers its value here.
-                input inputKey, "COLOR_MAP", title: "", required: true
-
-                // Next, inject a color picker (and its scripts) to help with setting
-                // the map:
-                def pickerId = "colorPicker${d}"
-                paragraph """
+    // Next, inject a color picker (and its scripts) to help with setting
+    // the map:
+    def pickerId = "colorPicker${pickerSuffix}"
+    paragraph """
 <input type="color" id="${pickerId}" style="width: 95%;" onChange="
-    let mapElement = document.getElementById('settings[holiday${i}Color${d}]');
+    let mapElement = document.getElementById('${inputId}');
     mapElement.value = '';
-    syncColors('colorPicker${d}', 'settings[holiday${i}Color${d}]');
+    syncColors('${pickerId}', '${inputId}');
 ">
 <script type="text/javascript">
 \$(document).ready(function() {
@@ -527,24 +543,64 @@ document.getElementById("${inputId}").addEventListener("change", function () {
 </script>
                 """, width: 5
 
-                // Then the preset options
-                paragraph """
-<select name="${presetKey}" id="cars" onChange="
-    let mapElement = document.getElementById('settings[holiday${i}Color${d}]');
+    // Then the preset options
+    paragraph """
+<select name="${presetKey}" onChange="
+    debugger;
+    let mapElement = document.getElementById('${inputId}');
     mapElement.value = this.value;
-    syncColors('colorPicker${d}', 'settings[holiday${i}Color${d}]');">
+    syncColors('${pickerId}', '${inputId}');">
 ${colorOptions}
 </select>
-                """,width: 4
+    """,width: 4
+}
 
-                // And finally a delete button.
-                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
-                input "deleteHoliday${i}Color${d}", "button", title: "${delete} Delete", submitOnChange: true, width: 3
+Map illuminationConfig() {
+    dynamicPage(name: "illuminationConfig", title: "Illumination Configuration") {
+        section("Switch Configuration") {
+            input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
+            input "otherIlluminationSwitches", "capability.switch", title: "Other switches to turn on when triggered", multiple: true
+        }
+        section("Triggered Configuration") {
+            input "illumStartTime", "enum", title: "Allow triggers from...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            input "illumStopTime", "enum", title: "Allow triggers until...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            if( startTime == CUSTOM || stopTime == CUSTOM ) {
+                if( illumStartTime == CUSTOM ) {
+                    input "illumStartTimeCustom", "time", title: "Specify start time:", width: 6
+                }
+                else {
+                    paragraph "", width: 6
+                }
+                if( illumStopTime == CUSTOM ) {
+                    input "illumStopTimeCustom", "time", title: "Specify stop time:", width: 6
+                }
+                else {
+                    paragraph "", width: 6
+                }
+            }
+            input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights", multiple: true
+            input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights", multiple: true
+            input "duration", "number", title: "How long to stay illuminated after motion stops / contact is closed?"
+        }
+        def devices = state.deviceIndices.collect{settings["device${it}"]};
+        log.debug "${devices}";
+        def areLightsCT = devices*.hasCapability("ColorTemperature");
+        log.debug "${areLightsCT}";
+        if( areLightsCT.any{ a -> a }) {
+            // Some lights support CT, so we can show the CT section.
+            section("Config for CT lights") {
+                input "colorTemperature", "number", title: "Color temperature", width: 6
+                input "level", "number", title: "Brightness", width: 6, range: "0..100"
             }
         }
-
-        section("") {
-            input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
+        if( areLightsCT.any{ a -> !a }) {
+            // Some lights do not support CT, so we need to show a color picker.
+            section("Config for non-CT lights") {
+                drawPicker("illuminationColor");
+                paragraph PICKER_JS, width:1;
+            }
         }
     }
 }
@@ -755,15 +811,16 @@ void initialize() {
     log.debug "Initialize.... ${state.nextHolidayIndex} and ${state.holidayIndices}"
 }
 
-void handler(evt) {
-}
-
 void debug(String msg) {
     if( debugSpew ) {
         log.debug msg
     }
 }
 
+// #region Constants
+
+// UI Elements
+@Field static final String trashIcon = "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/images/trash40.png"
 @Field static final Map ORDINALS = [
     "1": "First",
     "2": "Second",
@@ -773,11 +830,16 @@ void debug(String msg) {
     "-1": "Last"
 ]
 
+@Field static final Map TIME_OPTIONS = [
+    sunrise: "Sunrise",
+    sunset:  "Sunset",
+    custom:  "A specific time..."
+];
+
 @Field static final Map SPECIALS = [
     "easter": "Easter"
     // Others to be added later
 ]
-
 @Field static final Map COLORS = [
     "Choose a Preset": "",
     "White": [hue: 0, saturation: 0, level: 100],
@@ -801,6 +863,7 @@ void debug(String msg) {
     "Purple": [hue: 77, saturation: 100, level: 100]
 ];
 
+// Standardized strings
 @Field static final String STATIC = "static";
 @Field static final String RANDOM = "random";
 @Field static final String SEQUENTIAL = "sequential";
@@ -809,6 +872,11 @@ void debug(String msg) {
 @Field static final String FIXED = "fixed";
 @Field static final String SPECIAL = "special";
 
+@Field static final String SUNRISE = "sunrise";
+@Field static final String SUNSET = "sunset";
+@Field static final String CUSTOM = "custom";
+
+// Can't be constants because they reference other fields, but effectively constants.
 private Map GetHolidayByID(int id) {
     final Map RedWhiteAndBlue = [type: RANDOM, colors:[COLORS["Red"], COLORS["White"], COLORS["Blue"]]];
     final List MasterHolidayList = [
@@ -848,7 +916,6 @@ private Map GetHolidayByID(int id) {
     return MasterHolidayList[id];
 }
 
-
 private Map GetDefaultHolidays() {
     final Map indices = [
         "United States": [
@@ -872,7 +939,9 @@ private Map GetDefaultHolidays() {
         }]
     }
 }
+// #endregion
 
+// #region Utility Methods
 private HSVtoRGB(Map hsv) {
     float r, g, b, i, f, p, q, t;
     float s = ( hsv?.saturation ?: 0 ) / 100;
@@ -943,5 +1012,4 @@ private static easterForYear(int Y) {
             }
         }
 }
-
-@Field static final String trashIcon = "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/images/trash40.png"
+// #endregion
