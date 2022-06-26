@@ -7,7 +7,8 @@ import java.util.GregorianCalendar;
 import java.time.DayOfWeek;
 import java.time.Month;
 import java.time.format.DateTimeFormatter;
-import java.time.ZonedDateTime;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.LocalDate;
 import static java.time.temporal.TemporalAdjusters.*;
 import java.text.*;
@@ -122,25 +123,8 @@ Map holidayDefinitions() {
         }
 
         section("Devices and Times") {
-            input "holidayStartTime", "enum", title: "Start holiday lights at...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            input "holidayStopTime", "enum", title: "Stop holiday lights at...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            if( startTime == CUSTOM || stopTime == CUSTOM ) {
-                if( startTime == CUSTOM ) {
-                    input "startTimeCustom", "time", title: "Specify start time:",
-                    width: 6
-                }
-                else {
-                    paragraph "", width: 6
-                }
-                if( stopTime == CUSTOM ) {
-                    input "stopTimeCustom", "time", title: "Specify stop time:", width: 6
-                }
-                else {
-                    paragraph "", width: 6
-                }
-            }
+            selectStartStopTimes("holiday", "Display holiday lights");
+
             input "switchesForHoliday", "capability.switch", multiple: true,
                 title: "Other switches to turn on when holiday lights are active"
         }
@@ -562,24 +546,7 @@ Map illuminationConfig() {
             input "otherIlluminationSwitches", "capability.switch", title: "Other switches to turn on when triggered", multiple: true
         }
         section("Triggered Configuration") {
-            input "illumStartTime", "enum", title: "Allow triggers from...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            input "illumStopTime", "enum", title: "Allow triggers until...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            if( startTime == CUSTOM || stopTime == CUSTOM ) {
-                if( illumStartTime == CUSTOM ) {
-                    input "illumStartTimeCustom", "time", title: "Specify start time:", width: 6
-                }
-                else {
-                    paragraph "", width: 6
-                }
-                if( illumStopTime == CUSTOM ) {
-                    input "illumStopTimeCustom", "time", title: "Specify stop time:", width: 6
-                }
-                else {
-                    paragraph "", width: 6
-                }
-            }
+            selectStartStopTimes("illumination", "Allow triggers");
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights", multiple: true
             input "duration", "number", title: "How long to stay illuminated after motion stops / contact is closed?"
@@ -603,6 +570,25 @@ Map illuminationConfig() {
             }
         }
     }
+}
+
+private selectStartStopTimes(prefix, description) {
+            input "${prefix}StartTime", "enum", title: "${description} from...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            input "${prefix}StopTime", "enum", title: "${description} until...",
+                width: 6, options: TIME_OPTIONS, submitOnChange: true
+            if( settings["${prefix}StartTime"] == CUSTOM ) {
+                input "${prefix}StartTimeCustom", "time", title: "Specify start time:", width: 6
+            }
+            else {
+                input "${prefix}StartTimeOffset", "number", title: "Start time offset in minutes:", width: 6, range: "-240:240"
+            }
+            if( settings["${prefix}StopTime"] == CUSTOM ) {
+                input "${prefix}StopTimeCustom", "time", title: "Specify stop time:", width: 6
+            }
+            else {
+                input "${prefix}StopTimeOffset", "number", title: "Stop time offset in minutes:", width: 6, range: "-240:240"
+            }
 }
 
 private holidayIsValid(int i) {
@@ -793,11 +779,12 @@ private unarray(thing) {
 }
 
 void updated() {
-	initialize()
+	initialize();
+    beginStateMachine();
 }
 
 void installed() {
-	initialize()
+	initialize();
 }
 
 void initialize() {
@@ -816,6 +803,269 @@ void debug(String msg) {
         log.debug msg
     }
 }
+
+// #region Event Handlers
+
+void beginStateMachine() {
+    log.debug "Begin state machine";
+    unsubscribe();
+    unschedule();
+
+    // Basic subscriptions -- subscribe to switch changes and schedule begin/end
+    // of other periods.
+    if( illuminationSwitch ) {
+        subscribe(illuminationSwitch, "switch", "triggerIllumination");
+    }
+    if( duringIlluminationPeriod() ) {
+        beginIlluminationPeriod();
+    }
+
+    // Create schedules for things that don't change
+    startFixedSchedules();
+    // Schedule the next instances for sunrise/sunset values
+    scheduleSunriseAndSunset();
+
+    // ...and listen to the event to schedule future iterations.
+    subscribe(location, "sunriseTime", "scheduleSunriseAndSunset");
+    subscribe(location, "sunsetTime", "scheduleSunriseAndSunset");
+
+    // If switch is on, or sensors are triggered, we're in illumination mode
+    if( illuminationSwitch?.currentValue("switch") == "on" ||
+        motionTriggers.any {it.currentValue("motion") == "active"} ||
+        contactTriggers.any {it.currentValue("contact") == "open"} ) {
+            state.illuminationMode = true;
+    }
+    // Handle that immediately.
+    if( state.illuminationMode ) {
+        triggerIllumination();
+    }
+    else {
+        turnOffIllumination();
+    }
+    // If not, turn off the lights and schedule for next holiday.
+}
+
+private beginIlluminationPeriod() {
+    // Subscribe to the triggers
+    subscribe(motionTriggers, "motion.active", "triggerIllumination");
+    subscribe(contactTriggers, "contact.open", "triggerIllumination");
+    if( motionTriggers.any {it.currentValue("motion") == "active"} ||
+        contactTriggers.any {it.currentValue("contact") == "open"} ) {
+            triggerIllumination();
+    }
+}
+
+private endIlluminationPeriod() {
+    unsubscribe(motionTriggers);
+    unsubscribe(contactTriggers);
+    turnOffIllumination();
+}
+
+private triggerIllumination() {
+    state.illumination = true;
+    illuminationSwitch?.on();
+    def devices = deviceIndices.collect{ settings["device${it}"] };
+    def ctDevices = devices.filter { it.hasCapability("ColorTemperature")};
+    def rgbOnlyDevices = devices.minus(ctDevices);
+
+    if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature);
+    if( rgbOnlyDevices) rgbOnlyDevices*.setColor(illuminationColor);
+    if( otherIlluminationSwitches) otherIlluminationSwitches*.on();
+
+    subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
+    subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
+    unschedule("turnOffIllumination");
+
+    checkIlluminationOff();
+}
+
+private checkIlluminationOff() {
+    if( !(motionTriggers.any {it.currentValue("motion") == "active"} ||
+        contactTriggers.any {it.currentValue("contact") == "open"} ) ) {
+            runIn(duration * 60, "turnOffIllumination");
+    }
+}
+
+private turnOffIllumination() {
+    illuminationSwitch?.off();
+    state.illumination = false;
+
+    def currentOrNext = getCurrentOrNextHoliday();
+    if( (currentOrNext && currentOrNext["startDate"].isAfter(LocalDate.now())) ||
+            !duringHolidayPeriod()
+    ) {
+        // Holiday not currently active
+        if( currentOrNext ) {
+            scheduleHoliday(currentOrNext);
+        }
+
+        // Lights Off
+        lightsOff();
+    }
+}
+
+private getCurrentOrNextHoliday() {
+    // Placeholder, for now
+    return null;
+}
+
+private lightsOff() {
+    deviceIndices.each{ settings["device${it}"]*.off() };
+    if( otherIlluminationSwitches) otherIlluminationSwitches*.off();
+    if( switchesForHoliday) switchesForHoliday*.off();
+}
+
+private scheduleSunriseAndSunset() {
+    // Sunrise/sunset just changed, so schedule the upcoming events...
+    PREFIX_AND_HANDLERS.each {
+        def prefix = it[0];
+        def handler = it[1];
+        if (settings["${prefix}Time"] != CUSTOM ) {
+            def offset = settings["${key}Offset"];
+            def sunriseSunset = getSunriseAndSunset([
+                sunriseOffset: offset,
+                sunsetOffset: offset
+            ]);
+
+            def scheduleFirstFor = targetTime == SUNRISE ? sunriseSunset.sunrise : sunriseSunset.sunset;
+            runOnce(scheduleFirstFor, handler);
+        }
+    }
+}
+
+@Field static final List PREFIX_AND_HANDLERS = [
+    ["IlluminationStart", "beginIlluminationPeriod"],
+    ["IlluminationStop", "endIlluminationPeriod"],
+    ["HolidayStart", "beginHolidayPeriod"],
+    ["HolidayStop", "endHolidayPeriod"]
+];
+
+private startFixedSchedules() {
+    PREFIX_AND_HANDLERS.each {
+        def prefix = it[0];
+        def handler = it[1];
+        if( settings["${prefix}Time"] == CUSTOM ) {
+            schedule(getAsTimeString(prefix), handler);
+        }
+    }
+}
+
+// #endregion
+
+// #region Time Helper Functions
+
+private getAsTimeString(prefix) {
+    def time = LocalTime.parse(settings["${prefix}Custom"])
+
+    if( time ) {
+        return "0 " + time.format(DateTimeFormatter.ofPattern("m H")) +
+            " * * * *";
+    }
+    return null;
+}
+
+private LocalDateTime getIlluminationStart() {
+    return getLocalTimeToday("illuminationStart");
+}
+
+private LocalDateTime getIlluminationStop() {
+    return getLocalTimeToday("illuminationStop");
+}
+
+private LocalDateTime getHolidayStart() {
+    return getLocalTimeToday("holidayStart");
+}
+
+private LocalDateTime getHolidayStop() {
+    return getLocalTimeToday("holidayStop");
+}
+
+private Boolean duringHolidayPeriod() {
+    return duringPeriod("holiday");
+}
+
+private Boolean duringIlluminationPeriod() {
+    return duringPeriod("illumination");
+}
+
+private Boolean duringPeriod(prefix) {
+    def beginTime = getLocalTimeToday("${prefix}Start");
+    def endTime = getLocalTimeToday("${prefix}Stop");
+    def reverseResults = false;
+
+    if( !beginTime || !endTime ) {
+        log.warn "No ${prefix} time set.";
+        return false;
+    }
+
+    if( endTime < beginTime ) {
+        def swap = beginTime;
+        beginTime = endTime;
+        endTime = swap;
+        reverseResults = true;
+    }
+    def now = LocalDateTime.now();
+    def result = now.isAfter(beginTime) && now.isBefore(endTime);
+    return reverseResults ? !result : result;
+}
+
+private LocalDateTime getLocalTimeToday(prefix) {
+    def localTime = getLocalTime(prefix);
+    if( localTime ) {
+        return LocalDateTime.of(LocalDate.now(), localTime);
+    }
+    else {
+        return null;
+    }
+}
+
+private LocalDateTime getLocalTimeTomorrow(prefix) {
+    def localTime = getLocalTime(prefix);
+    if( localTime ) {
+        return LocalDateTime.of(LocalDate.now().plusDays(1), localTime);
+    }
+    else {
+        return null;
+    }
+}
+
+private LocalDateTime getNextLocalTime(prefix) {
+    def today = getLocalTimeToday(prefix);
+    if( today && LocalDateTime.now().isAfter(today) ) {
+        return getLocalTimeTomorrow(prefix);
+    }
+    else {
+        return today;
+    }
+}
+
+private LocalTime getLocalTime(prefix) {
+    def offset = settings["${prefix}Offset"] ?: 0;
+    def result;
+    log.debug "getLocalTime: ${prefix} ${settings["${prefix}Time"]} ${sunriseSunset} ${settings["${prefix}Custom"]}";
+    log.debug "getLocalTime: ${location.sunrise} ${location.sunset}";
+    switch(settings["${prefix}Time"]) {
+        case SUNRISE:
+            result = new SimpleDateFormat("HH:mm:ss").format(location.sunrise);
+            break;
+        case SUNSET:
+            result = new SimpleDateFormat("HH:mm:ss").format(location.sunset);
+            break;
+        case CUSTOM:
+            result = settings["${prefix}Custom"];
+            break;
+        default:
+            return null;
+    }
+    if( result ) {
+        return LocalTime.parse(result).plusMinutes(offset);
+    }
+    else {
+        return null;
+    }
+}
+
+// #endregion
 
 // #region Constants
 
