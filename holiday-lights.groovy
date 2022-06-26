@@ -10,6 +10,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.LocalDate;
+import java.time.Period;
 import static java.time.temporal.TemporalAdjusters.*;
 import java.text.*;
 
@@ -845,6 +846,22 @@ void beginStateMachine() {
     // If not, turn off the lights and schedule for next holiday.
 }
 
+private beginHolidayPeriod() {
+    log.debug "Begin holiday period";
+    def currentHoliday = getCurrentOrNextHoliday();
+    if( currentHoliday != null ) {
+        def dates = holidayDate(currentHoliday);
+        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart"));
+        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayEnd"));
+        def now = LocalDateTime.now();
+
+        if( now.isAfter(startTime) && now.isBefore(endTime) ) {
+            log.debug "Holiday is active";
+
+        }
+    }
+}
+
 private beginIlluminationPeriod() {
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
@@ -891,22 +908,76 @@ private turnOffIllumination() {
     state.illumination = false;
 
     def currentOrNext = getCurrentOrNextHoliday();
-    if( (currentOrNext && currentOrNext["startDate"].isAfter(LocalDate.now())) ||
-            !duringHolidayPeriod()
-    ) {
-        // Holiday not currently active
-        if( currentOrNext ) {
-            scheduleHoliday(currentOrNext);
-        }
-
+    def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
+    if( !duringHolidayPeriod() || currentOrNext == null ||
+            !dateIsBetweenInclusive(LocalDate.now(), holidayDate[0], holidayDate[1]) ) {
         // Lights Off
         lightsOff();
     }
+    else {
+        // Lights On
+        beginHolidayPeriod();
+    }
+}
+
+private dateIsBetweenInclusive(date, start, end) {
+    return (date.isEqual(start) || date.isAfter(start)) &&
+        (date.isBefore(end) || date.isEqual(end));
+}
+
+private getHolidayDates(index) {
+    def today = LocalDate.now()
+    def thisYear = today.getYear();
+    def nextYear = thisYear + 1;
+
+    def startDate = holidayDate(index, "Start", thisYear);
+    def endDate = holidayDate(index, "End", thisYear);
+
+    if( endDate.isBefore(startDate) ) {
+        endDate = holidayDate(index, "End", nextYear);
+    }
+    if( endDate.isBefore(today) ) {
+        startDate = holidayDate(index, "Start", startDate.getYear() + 1);
+        endDate = holidayDate(index, "End", endDate.getYear() + 1);
+    }
+    if( getLocalTime("holidayEnd")?.isBefore(getLocalTime("holidayStart")) ) {
+        endDate = endDate.addDays(1);
+    }
+    return [startDate, endDate];
 }
 
 private getCurrentOrNextHoliday() {
-    // Placeholder, for now
-    return null;
+    def thisYear = LocalDate.now().getYear();
+    def nextYear = thisYear + 1;
+    def today = LocalDate.now();
+    def futureHolidays = state.holidayIndices.collect{
+        def dates = getHolidayDates(it);
+        [it, dates[0], dates[1]]
+    };
+    log.debug "Future holidays: ${futureHolidays}";
+    def currentHolidays = futureHolidays.findAll{
+        def startDate = it[1];
+        def endDate = it[2];
+        dateIsBetweenInclusive(today, startDate, endDate);
+    };
+    log.debug "Current holidays: ${currentHolidays}";
+    if( currentHolidays.size() ) {
+        def result = currentHolidays.collect{
+            [it[0], Period.between(it[1], it[2])]
+        }.sort{ a,b -> a[1] <=> b[1] }.last();
+        log.debug "Current holiday: ${result}";
+        return result[0];
+    }
+    else if ( futureHolidays.size() ) {
+        def result = futureHolidays.
+            sort{ a,b -> a[1] <=> b[1] ?: a[2] <=> b[2] }.first();
+        log.debug "Next holiday: ${result}";
+        return result[0];
+    }
+    else {
+        log.debug "No holidays";
+        return null;
+    }
 }
 
 private lightsOff() {
