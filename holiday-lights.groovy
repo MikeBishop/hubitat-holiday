@@ -4,13 +4,8 @@
 */
 import groovy.transform.Field
 import java.util.GregorianCalendar;
-import java.time.DayOfWeek;
-import java.time.Month;
-import java.time.format.DateTimeFormatter;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.LocalDate;
-import java.time.Period;
+import java.time.*;
+import java.time.format.DateTimeFormatterBuilder;
 import static java.time.temporal.TemporalAdjusters.*;
 import java.text.*;
 
@@ -848,18 +843,112 @@ void beginStateMachine() {
 
 private beginHolidayPeriod() {
     log.debug "Begin holiday period";
-    def currentHoliday = getCurrentOrNextHoliday();
+    state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
+    def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
         def dates = holidayDate(currentHoliday);
         def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart"));
-        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayEnd"));
+        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop"));
         def now = LocalDateTime.now();
 
         if( now.isAfter(startTime) && now.isBefore(endTime) ) {
             log.debug "Holiday is active";
 
+            // We're going to start the display; unless it's static,
+            // schedule the updates.
+            if( settings["holiday${currentHoliday}Display"] != STATIC ) {
+                def handlerName = "doLightUpdate";
+                switch(frequency) {
+                    case 1:
+                        runEvery1Minute(handlerName);
+                        break;
+                    case 5:
+                        runEvery5Minutes(handlerName);
+                        break;
+                    case 10:
+                        runEvery10Minutes(handlerName);
+                        break;
+                    case 15:
+                        runEvery15Minutes(handlerName);
+                        break;
+                    case 30:
+                        runEvery30Minutes(handlerName);
+                        break;
+                    case 60:
+                        runEvery1Hour(handlerName);
+                        break;
+                    case 180:
+                        runEvery3Hours(handlerName);
+                        break;
+                }
+            }
+            doLightUpdate();
+            if( switchesForHoliday) switchesForHoliday*.on();
         }
     }
+}
+
+private doLightUpdate() {
+    log.debug "Do light update";
+    def currentHoliday = state.currentHoliday;
+    if( currentHoliday != null ) {
+        // Assemble the list of devices to use.
+        def devices = deviceIndices.collect{ settings["device${it}"] };
+        if( settings["holiday${currentHoliday}Alignment"] ) {
+            // Multiple colors displayed simultaneously.
+            devices = devices.collect{ [it] };
+        }
+        else {
+            // Single color displayed at a time.
+            devices = [devices];
+        }
+
+        // Assemble the list of colors to apply.
+        def colors = getColorsForHoliday(currentHoliday, devices.size());
+
+        // Apply the colors to the devices.
+        [devices, colors].transpose().each {
+            def device = it[0];
+            def color = it[1];
+            if( device && color ) {
+                device.setColor(color);
+            }
+        }
+    }
+}
+
+private getColorsForHoliday(index, desiredLength) {
+    def colors = state.colorIndices[index].collect{
+        try {
+            evaluate(settings["holiday${index}${it}Color"])
+        }
+        catch(Exception ex) {
+            log.debug ex
+            null
+        }
+    }.filter{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
+
+    def mode = settings["holiday${index}Rotation"];
+    if( mode == SEQUENTIAL ) {
+        desiredLength += colors.size();
+    }
+
+    def result = [];
+    // If we don't have enough colors, we'll need to repeat the colors.
+    while( result.size() < desiredLength ) {
+        if( mode == RANDOM ) {
+            result += colors.shuffled();
+        }
+        else {
+            result += colors;
+        }
+    }
+    def offset = 0;
+    if( mode == SEQUENTIAL ) {
+        offset = state.sequentialIndex ?: 0;
+        state.sequentialIndex = offset + 1;
+    }
+    return result.subList(offset, offset + desiredLength);
 }
 
 private beginIlluminationPeriod() {
@@ -892,6 +981,7 @@ private triggerIllumination() {
     subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
     subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
     unschedule("turnOffIllumination");
+    unschedule("doLightUpdate");
 
     checkIlluminationOff();
 }
@@ -933,16 +1023,23 @@ private getHolidayDates(index) {
     def startDate = holidayDate(index, "Start", thisYear);
     def endDate = holidayDate(index, "End", thisYear);
 
+    // If the end date is before the start date, it crosses the year boundary.
     if( endDate.isBefore(startDate) ) {
         endDate = holidayDate(index, "End", nextYear);
     }
+
+    // If the end date has passed, we need to move to the next occurrence.
     if( endDate.isBefore(today) ) {
         startDate = holidayDate(index, "Start", startDate.getYear() + 1);
         endDate = holidayDate(index, "End", endDate.getYear() + 1);
     }
-    if( getLocalTime("holidayEnd")?.isBefore(getLocalTime("holidayStart")) ) {
-        endDate = endDate.addDays(1);
+
+    // If the end time is before the start time, the display period crosses
+    // into the following day.
+    if( getLocalTime("holidayStop")?.isBefore(getLocalTime("holidayStart")) ) {
+        endDate = endDate.plusDays(1);
     }
+
     return [startDate, endDate];
 }
 
@@ -1026,7 +1123,7 @@ private startFixedSchedules() {
 // #region Time Helper Functions
 
 private getAsTimeString(prefix) {
-    def time = LocalTime.parse(settings["${prefix}Custom"])
+    def time = LocalTime.parse(settings["${prefix}TimeCustom"])
 
     if( time ) {
         return "0 " + time.format(DateTimeFormatter.ofPattern("m H")) +
@@ -1065,7 +1162,7 @@ private Boolean duringPeriod(prefix) {
     def reverseResults = false;
 
     if( !beginTime || !endTime ) {
-        log.warn "No ${prefix} time set.";
+        log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
         return false;
     }
 
@@ -1113,23 +1210,24 @@ private LocalDateTime getNextLocalTime(prefix) {
 private LocalTime getLocalTime(prefix) {
     def offset = settings["${prefix}Offset"] ?: 0;
     def result;
-    log.debug "getLocalTime: ${prefix} ${settings["${prefix}Time"]} ${sunriseSunset} ${settings["${prefix}Custom"]}";
+    log.debug "getLocalTime: ${prefix} ${settings["${prefix}Time"]} ${sunriseSunset} ${settings["${prefix}TimeCustom"]}";
     log.debug "getLocalTime: ${location.sunrise} ${location.sunset}";
     switch(settings["${prefix}Time"]) {
         case SUNRISE:
-            result = new SimpleDateFormat("HH:mm:ss").format(location.sunrise);
+            result = location.sunrise;
             break;
         case SUNSET:
-            result = new SimpleDateFormat("HH:mm:ss").format(location.sunset);
+            result = location.sunset;
             break;
         case CUSTOM:
-            result = settings["${prefix}Custom"];
+            result = timeToday(settings["${prefix}TimeCustom"]);
             break;
         default:
             return null;
     }
+    log.debug "getLocalTime: ${result}";
     if( result ) {
-        return LocalTime.parse(result).plusMinutes(offset);
+        return LocalTime.parse(new SimpleDateFormat("HH:mm:ss").format(result)).plusMinutes(offset);
     }
     else {
         return null;
