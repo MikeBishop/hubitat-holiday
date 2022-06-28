@@ -917,6 +917,13 @@ private doLightUpdate() {
     }
 }
 
+private endHolidayPeriod() {
+    log.debug "End holiday period";
+    state.currentHoliday = null;
+    unschedule("doLightUpdate");
+    lightsOff();
+}
+
 private getColorsForHoliday(index, desiredLength) {
     def colors = state.colorIndices[index].collect{
         try {
@@ -1078,7 +1085,8 @@ private getCurrentOrNextHoliday() {
 }
 
 private lightsOff() {
-    deviceIndices.each{ settings["device${it}"]*.off() };
+    def devices = deviceIndices.collect{ settings["device${it}"] };
+    if( devices ) devices*.off();
     if( otherIlluminationSwitches) otherIlluminationSwitches*.off();
     if( switchesForHoliday) switchesForHoliday*.off();
 }
