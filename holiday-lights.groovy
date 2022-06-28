@@ -388,7 +388,7 @@ def pageColorSelect(params) {
                 drawPicker(inputKey, color);
 
                 // And finally a delete button.
-                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
+                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; margin: 5px 5px 0 -8px;'>"
                 input "deleteHoliday${i}Color${color}", "button", title: "${delete} Delete", submitOnChange: true, width: 3
             }
         }
