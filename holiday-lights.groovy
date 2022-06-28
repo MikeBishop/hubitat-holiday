@@ -138,7 +138,6 @@ Map holidayDefinitions() {
                     settings["holiday${i}Color${it}"] != null
                 } ) {
                     colorDescription = colorsForThisHoliday.collect {
-                        log.debug "Color stored as ${settings["holiday${i}Color${it}"]}"
                         def colorMap;
                         try {
                             colorMap = evaluate(settings["holiday${i}Color${it}"].toString());
@@ -262,7 +261,7 @@ Map pageImport() {
                     paragraph "Finished importing ${list}!"
                 }
                 catch( Exception ex) {
-                    log.error "${ex} at ${ex.getStackTrace()}"
+                    error(ex);
                     paragraph "Importing failed!"
                 }
             }
@@ -759,7 +758,7 @@ private StringifyDate(int index) {
             }
         }
         catch(Exception ex) {
-            log.debug ex
+            error(ex);
             return "Invalid date"
         }
     }.join(" through ")
@@ -798,6 +797,10 @@ void debug(String msg) {
     if( debugSpew ) {
         log.debug msg
     }
+}
+
+void error(Exception ex) {
+    log.error "${ex} at ${ex.getStackTrace()}"
 }
 
 // #region Event Handlers
@@ -930,19 +933,20 @@ private getColorsForHoliday(index, desiredLength) {
             evaluate(settings["holiday${index}${it}Color"])
         }
         catch(Exception ex) {
-            log.debug ex
+            error(ex);
             null
         }
     }.filter{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
 
     def mode = settings["holiday${index}Rotation"];
+    def additional = 0;
     if( mode == SEQUENTIAL ) {
-        desiredLength += colors.size();
+        additional = colors.size();
     }
 
     def result = [];
     // If we don't have enough colors, we'll need to repeat the colors.
-    while( result.size() < desiredLength ) {
+    while( result.size() < desiredLength + additional ) {
         if( mode == RANDOM ) {
             result += colors.shuffled();
         }
@@ -953,12 +957,13 @@ private getColorsForHoliday(index, desiredLength) {
     def offset = 0;
     if( mode == SEQUENTIAL ) {
         offset = state.sequentialIndex ?: 0;
-        state.sequentialIndex = offset + 1;
+        state.sequentialIndex = (offset + 1) % additional;
     }
     return result.subList(offset, offset + desiredLength);
 }
 
 private beginIlluminationPeriod() {
+    log.debug "Begin illumination period";
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
@@ -969,20 +974,30 @@ private beginIlluminationPeriod() {
 }
 
 private endIlluminationPeriod() {
+    log.debug "End illumination period";
     unsubscribe(motionTriggers);
     unsubscribe(contactTriggers);
     turnOffIllumination();
 }
 
 private triggerIllumination() {
+    log.debug "Illumination triggered";
     state.illumination = true;
     illuminationSwitch?.on();
     def devices = deviceIndices.collect{ settings["device${it}"] };
     def ctDevices = devices.filter { it.hasCapability("ColorTemperature")};
     def rgbOnlyDevices = devices.minus(ctDevices);
 
-    if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature);
-    if( rgbOnlyDevices) rgbOnlyDevices*.setColor(illuminationColor);
+    if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature, level);
+    if( rgbOnlyDevices) {
+        try {
+            def colorMap = evaluate(illuminationColor);
+            rgbOnlyDevices*.setColor(colorMap);
+        }
+        catch(Exception ex) {
+            error(ex);
+        }
+    }
     if( otherIlluminationSwitches) otherIlluminationSwitches*.on();
 
     subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
@@ -1096,7 +1111,8 @@ private scheduleSunriseAndSunset() {
     PREFIX_AND_HANDLERS.each {
         def prefix = it[0];
         def handler = it[1];
-        if (settings["${prefix}Time"] != CUSTOM ) {
+        def targetTime = settings["${prefix}Time"];
+        if ( targetTime != CUSTOM ) {
             def offset = settings["${key}Offset"];
             def sunriseSunset = getSunriseAndSunset([
                 sunriseOffset: offset,
@@ -1104,16 +1120,21 @@ private scheduleSunriseAndSunset() {
             ]);
 
             def scheduleFirstFor = targetTime == SUNRISE ? sunriseSunset.sunrise : sunriseSunset.sunset;
+            if( scheduleFirstFor < new Date() ) {
+                // Date in past; advance by a day
+                scheduleFirstFor = Date.from(scheduleFirstFor.toInstant().plus(Duration.ofDays(1)));
+            }
+            log.debug "Scheduling ${prefix} for ${scheduleFirstFor} (${targetTime})";
             runOnce(scheduleFirstFor, handler);
         }
     }
 }
 
 @Field static final List PREFIX_AND_HANDLERS = [
-    ["IlluminationStart", "beginIlluminationPeriod"],
-    ["IlluminationStop", "endIlluminationPeriod"],
-    ["HolidayStart", "beginHolidayPeriod"],
-    ["HolidayStop", "endHolidayPeriod"]
+    ["illuminationStart", "beginIlluminationPeriod"],
+    ["illuminationStop", "endIlluminationPeriod"],
+    ["holidayStart", "beginHolidayPeriod"],
+    ["holidayStop", "endHolidayPeriod"]
 ];
 
 private startFixedSchedules() {
@@ -1121,7 +1142,9 @@ private startFixedSchedules() {
         def prefix = it[0];
         def handler = it[1];
         if( settings["${prefix}Time"] == CUSTOM ) {
-            schedule(getAsTimeString(prefix), handler);
+            def time = getAsTimeString(prefix);
+            log.debug "Scheduling ${prefix} for ${time} (custom)";
+            schedule(time, handler);
         }
     }
 }
@@ -1131,11 +1154,11 @@ private startFixedSchedules() {
 // #region Time Helper Functions
 
 private getAsTimeString(prefix) {
-    def time = LocalTime.parse(settings["${prefix}TimeCustom"])
+    def legacyDate = timeToday(settings["${prefix}TimeCustom"]);
 
-    if( time ) {
-        return "0 " + time.format(DateTimeFormatter.ofPattern("m H")) +
-            " * * * *";
+    if( legacyDate ) {
+        return "0 " + new SimpleDateFormat("m H").format(legacyDate) +
+            " * * ?";
     }
     return null;
 }
@@ -1218,8 +1241,6 @@ private LocalDateTime getNextLocalTime(prefix) {
 private LocalTime getLocalTime(prefix) {
     def offset = settings["${prefix}Offset"] ?: 0;
     def result;
-    log.debug "getLocalTime: ${prefix} ${settings["${prefix}Time"]} ${sunriseSunset} ${settings["${prefix}TimeCustom"]}";
-    log.debug "getLocalTime: ${location.sunrise} ${location.sunset}";
     switch(settings["${prefix}Time"]) {
         case SUNRISE:
             result = location.sunrise;
@@ -1233,7 +1254,7 @@ private LocalTime getLocalTime(prefix) {
         default:
             return null;
     }
-    log.debug "getLocalTime: ${result}";
+    log.debug "getLocalTime: ${prefix} is ${result}";
     if( result ) {
         return LocalTime.parse(new SimpleDateFormat("HH:mm:ss").format(result)).plusMinutes(offset);
     }
