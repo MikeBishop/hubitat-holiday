@@ -816,6 +816,7 @@ void beginStateMachine() {
     unschedule();
     state.test = false;
     state.currentHoliday = null;
+    state.sequentialIndex = null;
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
@@ -976,16 +977,12 @@ private getColorsForHoliday(index, desiredLength) {
 
     def result = [];
     // If we don't have enough colors, we'll need to repeat the colors.
-    while( result.size() < desiredLength + additional ) {
-        if( mode == RANDOM ) {
-            def shuffled = colors.clone();
-            Collections.shuffle(shuffled);
-            result += shuffled;
-        }
-        else {
-            result += colors;
-        }
+    while( result.size() < desiredLength + additional ) result += colors;
+
+    if( mode == RANDOM ) {
+        Collections.shuffle(result);
     }
+
     log.debug "Colors for holiday ${index}: ${result.inspect()}";
     def offset = 0;
     if( mode == SEQUENTIAL ) {
