@@ -5,7 +5,7 @@
 import groovy.transform.Field
 import java.util.GregorianCalendar;
 import java.time.*;
-import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.DateTimeFormatter;
 import static java.time.temporal.TemporalAdjusters.*;
 import java.text.*;
 
@@ -813,7 +813,8 @@ void beginStateMachine() {
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
     if( illuminationSwitch ) {
-        subscribe(illuminationSwitch, "switch", "triggerIllumination");
+        subscribe(illuminationSwitch, "switch.on", "triggerIllumination");
+        subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     }
     if( duringIlluminationPeriod() ) {
         beginIlluminationPeriod();
@@ -836,7 +837,9 @@ void beginStateMachine() {
     }
     // Handle that immediately.
     if( state.illuminationMode ) {
+        log.debug "Illumination mode is on when starting";
         triggerIllumination();
+        checkIlluminationOff();
     }
     else {
         turnOffIllumination();
@@ -849,7 +852,7 @@ private beginHolidayPeriod() {
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
-        def dates = holidayDate(currentHoliday);
+        def dates = getHolidayDates(currentHoliday);
         def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart"));
         def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop"));
         def now = LocalDateTime.now();
@@ -861,7 +864,8 @@ private beginHolidayPeriod() {
             // schedule the updates.
             if( settings["holiday${currentHoliday}Display"] != STATIC ) {
                 def handlerName = "doLightUpdate";
-                switch(frequency) {
+                log.debug "Scheduling ${handlerName} every ${frequency} minutes";
+                switch(Integer.parseInt(frequency)) {
                     case 1:
                         runEvery1Minute(handlerName);
                         break;
@@ -883,6 +887,8 @@ private beginHolidayPeriod() {
                     case 180:
                         runEvery3Hours(handlerName);
                         break;
+                    default:
+                        log.error "Invalid frequency: ${frequency.inspect()}";
                 }
             }
             doLightUpdate();
@@ -896,7 +902,7 @@ private doLightUpdate() {
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
         // Assemble the list of devices to use.
-        def devices = deviceIndices.collect{ settings["device${it}"] };
+        def devices = state.deviceIndices.collect{ settings["device${it}"] };
         if( settings["holiday${currentHoliday}Alignment"] ) {
             // Multiple colors displayed simultaneously.
             devices = devices.collect{ [it] };
@@ -910,11 +916,13 @@ private doLightUpdate() {
         def colors = getColorsForHoliday(currentHoliday, devices.size());
 
         // Apply the colors to the devices.
+        log.debug "Applying colors ${colors.inspect()} to devices ${devices.inspect()}";
         [devices, colors].transpose().each {
             def device = it[0];
             def color = it[1];
+            log.debug "Setting ${device} to ${color}";
             if( device && color ) {
-                device.setColor(color);
+                device*.setColor(color);
             }
         }
     }
@@ -928,15 +936,16 @@ private endHolidayPeriod() {
 }
 
 private getColorsForHoliday(index, desiredLength) {
-    def colors = state.colorIndices[index].collect{
+    def colors = state.colorIndices["${index}"].collect{
         try {
-            evaluate(settings["holiday${index}${it}Color"])
+            evaluate(settings["holiday${index}Color${it}"])
         }
         catch(Exception ex) {
             error(ex);
             null
         }
-    }.filter{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
+    };
+    colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
 
     def mode = settings["holiday${index}Rotation"];
     def additional = 0;
@@ -954,12 +963,16 @@ private getColorsForHoliday(index, desiredLength) {
             result += colors;
         }
     }
+    log.debug "Colors for holiday ${index}: ${result.inspect()}";
     def offset = 0;
     if( mode == SEQUENTIAL ) {
         offset = state.sequentialIndex ?: 0;
-        state.sequentialIndex = (offset + 1) % additional;
+        state.sequentialIndex = (offset + 1) % (additional ?: 1);
+        log.debug "Starting from offset ${offset} (next is ${state.sequentialIndex})";
     }
-    return result.subList(offset, offset + desiredLength);
+    def subList = result.drop(offset);
+    log.debug "Sublist: ${subList.inspect()}";
+    return subList;
 }
 
 private beginIlluminationPeriod() {
@@ -969,6 +982,7 @@ private beginIlluminationPeriod() {
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
     if( motionTriggers.any {it.currentValue("motion") == "active"} ||
         contactTriggers.any {it.currentValue("contact") == "open"} ) {
+            log.debug "Motion or contact trigger is active when illumination period begins";
             triggerIllumination();
     }
 }
@@ -980,15 +994,17 @@ private endIlluminationPeriod() {
     turnOffIllumination();
 }
 
-private triggerIllumination() {
-    log.debug "Illumination triggered";
-    state.illumination = true;
+private triggerIllumination(event = null) {
+    log.debug "Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : "");
+    state.illuminationMode = true;
     illuminationSwitch?.on();
-    def devices = deviceIndices.collect{ settings["device${it}"] };
-    def ctDevices = devices.filter { it.hasCapability("ColorTemperature")};
+    def devices = state.deviceIndices.collect{ settings["device${it}"] };
+    def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
+    log.debug "CT-capable devices: ${ctDevices.inspect()}";
     def rgbOnlyDevices = devices.minus(ctDevices);
+    log.debug "RGB devices: ${rgbOnlyDevices.inspect()}";
 
-    if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature, level);
+    if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature, level, null);
     if( rgbOnlyDevices) {
         try {
             def colorMap = evaluate(illuminationColor);
@@ -1005,24 +1021,30 @@ private triggerIllumination() {
     unschedule("turnOffIllumination");
     unschedule("doLightUpdate");
 
-    checkIlluminationOff();
+    //checkIlluminationOff();
+    // Try not checking this, so the switch keeps lights on.
 }
 
-private checkIlluminationOff() {
+private checkIlluminationOff(event = null) {
+    log.debug "Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : "");
     if( !(motionTriggers.any {it.currentValue("motion") == "active"} ||
         contactTriggers.any {it.currentValue("contact") == "open"} ) ) {
+            log.debug "No motion or contact detected, turning off illumination in ${duration} minutes";
             runIn(duration * 60, "turnOffIllumination");
     }
 }
 
-private turnOffIllumination() {
+private turnOffIllumination(event = null) {
+    log.debug "Turning off illumination" + (event ? " after ${event.device} sent ${event.value}" : "");
     illuminationSwitch?.off();
-    state.illumination = false;
+    state.illuminationMode = false;
+    unschedule("turnOffIllumination");
+    unschedule("checkIlluminationOff");
 
     def currentOrNext = getCurrentOrNextHoliday();
     def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
-    if( !duringHolidayPeriod() || currentOrNext == null ||
-            !dateIsBetweenInclusive(LocalDate.now(), holidayDate[0], holidayDate[1]) ) {
+    if( !duringHolidayPeriod() || holidayDates == null ||
+            !dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) ) {
         // Lights Off
         lightsOff();
     }
@@ -1061,6 +1083,7 @@ private getHolidayDates(index) {
     if( getLocalTime("holidayStop")?.isBefore(getLocalTime("holidayStart")) ) {
         endDate = endDate.plusDays(1);
     }
+    log.debug "Holiday ${index} starts ${startDate} and ends ${endDate}";
 
     return [startDate, endDate];
 }
@@ -1106,7 +1129,7 @@ private lightsOff() {
     if( switchesForHoliday) switchesForHoliday*.off();
 }
 
-private scheduleSunriseAndSunset() {
+private scheduleSunriseAndSunset(event = null) {
     // Sunrise/sunset just changed, so schedule the upcoming events...
     PREFIX_AND_HANDLERS.each {
         def prefix = it[0];
