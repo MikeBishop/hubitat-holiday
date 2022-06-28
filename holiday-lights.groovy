@@ -157,7 +157,6 @@ Map holidayDefinitions() {
                     title: "Edit ${settings["holiday${i}Name"]} colors",
                     description: colorDescription,
                     params: [holidayIndex: i],
-                    width: 8
                 )
                 href(
                     name: "editHoliday${i}",
@@ -165,8 +164,9 @@ Map holidayDefinitions() {
                     title: "Edit ${settings["holiday${i}Name"]} schedule",
                     description: StringifyDate(i),
                     params: [holidayIndex: i],
-                    width: 8
                 )
+                input "testHoliday${i}", "button", title: "Test Holiday", submitOnChange: true, width: 4
+                paragraph "", width: 1
                 def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
                 input "deleteHoliday${i}", "button", title: "${delete} Delete", submitOnChange: true, width: 4
             }
@@ -394,6 +394,7 @@ def pageColorSelect(params) {
         }
 
         section("") {
+            input "testHoliday${i}", "button", title: "Test Holiday", submitOnChange: true
             input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
         }
     }
@@ -673,6 +674,10 @@ void appButtonHandler(btn) {
         def holidayIndex = Integer.parseInt(btn.minus("addColorToHoliday"));
         AddColorToHoliday(holidayIndex);
     }
+    else if (btn.startsWith("testHoliday")) {
+        def holidayIndex = Integer.parseInt(btn.minus("testHoliday"));
+        testHoliday(holidayIndex);
+    }
 }
 
 private AddColorToHoliday(int holidayIndex) {
@@ -809,12 +814,13 @@ void beginStateMachine() {
     log.debug "Begin state machine";
     unsubscribe();
     unschedule();
+    state.test = false;
+    state.currentHoliday = null;
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
     if( illuminationSwitch ) {
         subscribe(illuminationSwitch, "switch.on", "triggerIllumination");
-        subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     }
     if( duringIlluminationPeriod() ) {
         beginIlluminationPeriod();
@@ -847,6 +853,19 @@ void beginStateMachine() {
     // If not, turn off the lights and schedule for next holiday.
 }
 
+private testHoliday(index) {
+    state.currentHoliday = index;
+    state.test = true;
+    turnOffIllumination();
+    beginHolidayPeriod();
+    if( settings["holiday${currentHoliday}Display"] != STATIC ) {
+        [15, 30, 45].each {
+            runIn(it, "doLightUpdate");
+        }
+    }
+    runIn(60, "beginStateMachine");
+}
+
 private beginHolidayPeriod() {
     log.debug "Begin holiday period";
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
@@ -857,13 +876,14 @@ private beginHolidayPeriod() {
         def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop"));
         def now = LocalDateTime.now();
 
-        if( now.isAfter(startTime) && now.isBefore(endTime) ) {
+        if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
             log.debug "Holiday is active";
 
             // We're going to start the display; unless it's static,
             // schedule the updates.
-            if( settings["holiday${currentHoliday}Display"] != STATIC ) {
-                def handlerName = "doLightUpdate";
+            def handlerName = "doLightUpdate";
+            unschedule(handlerName);
+            if( settings["holiday${currentHoliday}Display"] != STATIC && !state.test ) {
                 log.debug "Scheduling ${handlerName} every ${frequency} minutes";
                 switch(Integer.parseInt(frequency)) {
                     case 1:
@@ -945,6 +965,7 @@ private getColorsForHoliday(index, desiredLength) {
             null
         }
     };
+    log.debug "Colors for holiday ${index}: ${colors.inspect()}";
     colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
 
     def mode = settings["holiday${index}Rotation"];
@@ -957,7 +978,9 @@ private getColorsForHoliday(index, desiredLength) {
     // If we don't have enough colors, we'll need to repeat the colors.
     while( result.size() < desiredLength + additional ) {
         if( mode == RANDOM ) {
-            result += colors.shuffled();
+            def shuffled = colors.clone();
+            Collections.shuffle(shuffled);
+            result += shuffled;
         }
         else {
             result += colors;
@@ -970,7 +993,7 @@ private getColorsForHoliday(index, desiredLength) {
         state.sequentialIndex = (offset + 1) % (additional ?: 1);
         log.debug "Starting from offset ${offset} (next is ${state.sequentialIndex})";
     }
-    def subList = result.drop(offset);
+    def subList = result[offset..<(offset + desiredLength)];
     log.debug "Sublist: ${subList.inspect()}";
     return subList;
 }
@@ -1018,6 +1041,7 @@ private triggerIllumination(event = null) {
 
     subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
     subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
+    subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unschedule("doLightUpdate");
 
@@ -1039,7 +1063,8 @@ private turnOffIllumination(event = null) {
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
-    unschedule("checkIlluminationOff");
+    unsubscribe(motionTriggers, "motion.inactive");
+    unsubscribe(contactTriggers, "contact.closed");
 
     def currentOrNext = getCurrentOrNextHoliday();
     def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
@@ -1123,7 +1148,8 @@ private getCurrentOrNextHoliday() {
 }
 
 private lightsOff() {
-    def devices = deviceIndices.collect{ settings["device${it}"] };
+    log.debug "Turning off lights";
+    def devices = state.deviceIndices.collect{ settings["device${it}"] };
     if( devices ) devices*.off();
     if( otherIlluminationSwitches) otherIlluminationSwitches*.off();
     if( switchesForHoliday) switchesForHoliday*.off();
@@ -1277,7 +1303,6 @@ private LocalTime getLocalTime(prefix) {
         default:
             return null;
     }
-    log.debug "getLocalTime: ${prefix} is ${result}";
     if( result ) {
         return LocalTime.parse(new SimpleDateFormat("HH:mm:ss").format(result)).plusMinutes(offset);
     }
@@ -1362,7 +1387,7 @@ private Map GetHolidayByID(int id) {
             endDate: [type: FIXED, month: Month.JUNE, day: 30],
             settings: [ type: SEQUENTIAL,
                 colors: [COLORS["Red"], COLORS["Orange"], COLORS["Yellow"],
-                        COLORS["Green"], COLORS["Indigo"], COLORS["Purple"]]
+                        COLORS["Green"], COLORS["Blue"], COLORS["Purple"]]
             ]
         ],
         // 4
