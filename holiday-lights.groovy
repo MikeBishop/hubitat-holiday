@@ -11,8 +11,8 @@ import java.text.*;
 
 definition (
     name: "Holiday Lighting", namespace: "evequefou", author: "Mike Bishop", description: "Themed light shows on RGB lights on holidays",
-    importUrl: "TBD",
-    category: "My Apps",
+    importUrl: "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/holiday-lights.groovy",
+    category: "Lighting",
     iconUrl: "",
     iconX2Url: ""
 )
