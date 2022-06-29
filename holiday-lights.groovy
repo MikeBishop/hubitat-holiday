@@ -66,6 +66,8 @@ Map mainPage() {
                 title: "Holiday Displays",
             )
 
+            input "debugSpew", "bool", title: "Log debug messages?",
+                submitOnChange: true, defaultValue: false;
         }
     }
 }
@@ -75,11 +77,11 @@ Map deviceSelection() {
         section("Devices for Holiday Display") {
             def key;
             def displayIndex = 0
-            log.debug "Device indices are ${state.deviceIndices}"
+            debug("Device indices are ${state.deviceIndices}")
             def deviceIndices = state.deviceIndices.clone();
             for( def index in deviceIndices ) {
                 key = "device${index}";
-                log.debug "settings[${key}] is ${settings[key]}";
+                debug("settings[${key}] is ${settings[key]}")
                 if( settings[key] == null ) {
                     // User unselected this device -- drop the index
                     state.deviceIndices.removeElement(index);
@@ -114,7 +116,7 @@ Map holidayDefinitions() {
     dynamicPage(name: "holidayDefinitions", title: "Configure Holiday Displays") {
         sortHolidays()
         if( !state.colorIndices ) {
-            log.debug "Creating colorIndices"
+            debug("Creating colorIndices")
             state.colorIndices = [:];
         }
 
@@ -125,15 +127,15 @@ Map holidayDefinitions() {
                 title: "Other switches to turn on when holiday lights are active"
         }
 
-        log.debug "Indices are ${state.holidayIndices.inspect()}"
-        log.debug "Colors are ${state.colorIndices.inspect()}"
+        debug("Indices are ${state.holidayIndices.inspect()}")
+        debug("Colors are ${state.colorIndices.inspect()}")
         state.holidayIndices?.each { int i ->
             def title = "${settings["holiday${i}Name"]}"
             section(hideable: true, hidden: true, title) {
                 // List colors here!
                 def colorDescription = "No colors yet. Add some!"
                 def colorsForThisHoliday = state.colorIndices["${i}"];
-                log.debug "Colors for ${i} are ${colorsForThisHoliday}"
+                debug("Colors for ${i} are ${colorsForThisHoliday}")
                 if( colorsForThisHoliday?.size() && colorsForThisHoliday.every {
                     settings["holiday${i}Color${it}"] != null
                 } ) {
@@ -143,9 +145,9 @@ Map holidayDefinitions() {
                             colorMap = evaluate(settings["holiday${i}Color${it}"].toString());
                         }
                         catch (Exception ex) {
-                            log.debug "Rehydration failed with ${ex}"
+                            debug("Rehydration failed with ${ex}")
                         }
-                        log.debug "Color rehydrated as ${colorMap}"
+                        debug("Color rehydrated as ${colorMap}")
                         def colorInRGB = HSVtoRGB(colorMap) ?: "#000000";
                         "<div style=\"background-color: ${colorInRGB}; padding: 10px; border: 1px solid black; display: inline-block\">&nbsp;</div>"
                     }.join()
@@ -192,7 +194,7 @@ Map holidayDefinitions() {
                 )
             }
         }
-        log.debug "Finished page"
+        debug("Finished page")
     }
 }
 
@@ -204,16 +206,16 @@ Map pageImport() {
             section("Importing ${list}...") {
                 try {
                     def holidaysToImport = GetDefaultHolidays()[list];
-                    log.debug "Plan to import ${holidaysToImport.size()} from ${holidaysToImport}"
+                    debug("Plan to import ${holidaysToImport.size()} from ${holidaysToImport}")
                     holidaysToImport.each {
-                        log.debug "Entering holiday parser..."
+                        debug("Entering holiday parser...")
                         def i = state.nextHolidayIndex;
                         def source = it;
-                        log.debug "Attempting ${source.name}"
+                        debug("Attempting ${source.name}")
                         def importSearch = alreadyImported.find{ it.value == source["id"] &&
                                 state.holidayIndices.contains(Integer.parseInt(it.key)) }
                         if( importSearch ) {
-                            log.debug "${source.name} already exists at index ${importSearch.key}"
+                            debug("${source.name} already exists at index ${importSearch.key}")
                             paragraph "${source.name} already imported; skipping"
                         }
                         else {
@@ -225,13 +227,13 @@ Map pageImport() {
                                     app.updateSetting("holiday${i}${it}Type", source[key].type)
                                     if( source[key].type != SPECIAL ) {
                                         if( source[key].type == ORDINAL ) {
-                                            log.debug "Ordinal, ${source[key].ordinal} ${source[key].weekday.toString()} of ${source[key].month.toString()}"
+                                            debug("Ordinal, ${source[key].ordinal} ${source[key].weekday.toString()} of ${source[key].month.toString()}")
                                             app.updateSetting("holiday${i}${it}Ordinal", source[key].ordinal.toString())
                                             app.updateSetting("holiday${i}${it}Weekday", source[key].weekday.toString())
                                         }
                                         else {
                                             //Fixed
-                                            log.debug "Fixed, ${source[key].month.toString()} ${source[key].day}"
+                                            debug("Fixed, ${source[key].month.toString()} ${source[key].day}")
                                             app.updateSetting("holiday${i}${it}Day", source[key].day)
                                         }
                                         app.updateSetting("holiday${i}${it}Month", source[key].month.toString())
@@ -308,7 +310,7 @@ def pageEditHoliday(params) {
         dates.each{
             def date = it
             section("${settings["holiday${i}Span"] ? it : "Select"} date") {
-                log.debug "date is ${date}"
+                debug("date is ${date}")
                 input "holiday${i}${date}Type", "enum", title: "Type of Schedule", multiple: false, options: [
                     (FIXED): "Fixed date",
                     (ORDINAL): "Fixed weekday",
@@ -368,18 +370,18 @@ def pageColorSelect(params) {
         }
 
 
-        log.debug "colorIndices is now ${state.colorIndices.inspect()}"
+        debug("colorIndices is now ${state.colorIndices.inspect()}")
         def colorsForThisHoliday = state.colorIndices["${i}"];
         if( !colorsForThisHoliday ) {
             colorsForThisHoliday = [];
             state.colorIndices["${i}"] = colorsForThisHoliday;
         }
-        log.debug "colorsForThisHoliday ${colorsForThisHoliday.inspect()}"
+        debug("colorsForThisHoliday ${colorsForThisHoliday.inspect()}")
 
         colorsForThisHoliday.eachWithIndex { color, index ->
 
             def inputKey = "holiday${i}Color${color}"
-            log.debug "Color ${index+1} is ${settings[inputKey]}"
+            debug("Color ${index+1} is ${settings[inputKey]}")
 
             // For each existing color slot, display four things:
             section("Color ${index+1}") {
@@ -548,9 +550,9 @@ Map illuminationConfig() {
             input "duration", "number", title: "How long to stay illuminated after motion stops / contact is closed?"
         }
         def devices = state.deviceIndices.collect{settings["device${it}"]};
-        log.debug "${devices}";
+        debug("${devices}");
         def areLightsCT = devices*.hasCapability("ColorTemperature");
-        log.debug "${areLightsCT}";
+        debug("${areLightsCT}");
         if( areLightsCT.any{ a -> a }) {
             // Some lights support CT, so we can show the CT section.
             section("Config for CT lights") {
@@ -602,7 +604,7 @@ private holidayDateIsValid(String key) {
 
 private holidayDate(int i, String dateType, int year) {
     def name = settings["holiday${i}Name"];
-    // log.debug "Finding concrete ${dateType} date for ${i} (${name})"
+    // debug("Finding concrete ${dateType} date for ${i} (${name})")
     if( dateType == "Start" && !settings["holiday${i}Span"]) {
         // For non-Span holidays, the start date is the day before the end date
         return holidayDate(i, "End", year)?.minusDays(1);
@@ -615,13 +617,13 @@ private holidayDate(int i, String dateType, int year) {
     def result;
     switch(type) {
         case FIXED:
-            // log.debug "Fixed ${year}, ${month}, ${date}"
+            // debug("Fixed ${year}, ${month}, ${date}")
             result = LocalDate.of(year, Month.valueOf(month), date);
             break;
         case ORDINAL:
             def ordinal = settings["${key}Ordinal"]
             def weekday = settings["${key}Weekday"]
-            // log.debug "Ordinal ${year}, ${month}, ${ordinal}, ${weekday}"
+            // debug("Ordinal ${year}, ${month}, ${ordinal}, ${weekday}")
             result = LocalDate.of(year, Month.valueOf(month), 15).
                 with(dayOfWeekInMonth(Integer.parseInt(ordinal), DayOfWeek.valueOf(weekday)));
             break;
@@ -653,7 +655,7 @@ private holidayDate(int i, String dateType, int year) {
 
 private sortHolidays() {
     def thisYear = LocalDate.now().getYear()
-    log.debug "Sorting holidays...."
+    debug("Sorting holidays....")
     def originalList = state.holidayIndices
     def sortedList = originalList.collect{
             [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
@@ -661,7 +663,7 @@ private sortHolidays() {
             a[2] <=> b[2] ?: a[1] <=> b[1]
         }.collect{it[0]};
     state.holidayIndices = sortedList;
-    log.debug "${originalList} became ${sortedList}"
+    debug("${originalList} became ${sortedList}")
 }
 
 void appButtonHandler(btn) {
@@ -694,7 +696,7 @@ private AddColorToHoliday(int holidayIndex) {
     def nextColor = state.nextColorIndices["${holidayIndex}"] ?: 0;
     def indicesForHoliday = state.colorIndices["${holidayIndex}"];
 
-    log.debug "indicesForHoliday is ${indicesForHoliday.inspect()}"
+    debug("indicesForHoliday is ${indicesForHoliday.inspect()}")
     if( indicesForHoliday ) {
         indicesForHoliday.add(nextColor);
         state.colorIndices["${holidayIndex}"] = indicesForHoliday;
@@ -702,15 +704,15 @@ private AddColorToHoliday(int holidayIndex) {
     else {
         state.colorIndices["${holidayIndex}"] = [nextColor];
     }
-    log.debug "colorIndices is now ${state.colorIndices.inspect()}"
+    debug("colorIndices is now ${state.colorIndices.inspect()}")
     state.nextColorIndices["${holidayIndex}"] = nextColor + 1;
     return nextColor;
 }
 
 private DeleteHoliday(int index) {
-    log.debug "Deleting ${index}";
+    debug("Deleting ${index}");
     settings.keySet().findAll{ it.startsWith("holiday${index}") }.each {
-        log.debug "Removing setting ${it}"
+        debug("Removing setting ${it}")
         app.removeSetting(it);
     }
     state.holidayIndices.removeElement(index);
@@ -728,13 +730,13 @@ private StringifyDate(int index) {
     if( settings["holiday${index}Span"] ) {
         dates.add(0, "Start");
     }
-    log.debug "Dates are ${dates}"
+    debug("Dates are ${dates}")
     dates.collect {
         try {
             def result = ""
             if( settings["holiday${index}${it}Type"] != SPECIAL ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
-                log.debug "Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}"
+                debug("Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}")
                 def monthEnum = unarray(settings["holiday${index}${it}Month"]);
                 def month = Month.valueOf(monthEnum);
                 def monthString = LocalDate.now().with(month).format(formatter);
@@ -750,7 +752,7 @@ private StringifyDate(int index) {
 
                 if( settings["holiday${index}${it}Type"] == ORDINAL ) {
                     def ordinal = unarray(settings["holiday${index}${it}Ordinal"]);
-                    log.debug "Ordinal is ${ordinal} -> ${ORDINALS[ordinal]}"
+                    debug("Ordinal is ${ordinal} -> ${ORDINALS[ordinal]}")
                     result += "${ORDINALS[ordinal]} ";
                     def formatter = DateTimeFormatter.ofPattern("EEEE");
                     def dayEnum = unarray(settings["holiday${index}${it}Weekday"]);
@@ -801,12 +803,12 @@ void initialize() {
     state.holidayIndices = state.holidayIndices ?: [];
     state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
     state.deviceIndices = state.deviceIndices ?: [];
-    log.debug "Initialize.... ${state.nextHolidayIndex} and ${state.holidayIndices}"
+    debug("Initialize.... ${state.nextHolidayIndex} and ${state.holidayIndices}")
 }
 
 void debug(String msg) {
     if( debugSpew ) {
-        log.debug msg
+        log.debug(msg)
     }
 }
 
@@ -817,7 +819,7 @@ void error(Exception ex) {
 // #region Event Handlers
 
 void beginStateMachine() {
-    log.debug "Begin state machine";
+    debug("Begin state machine");
     unsubscribe();
     unschedule();
     state.test = false;
@@ -850,7 +852,7 @@ void beginStateMachine() {
     }
     // Handle that immediately.
     if( state.illuminationMode ) {
-        log.debug "Illumination mode is on when starting";
+        debug("Illumination mode is on when starting");
         triggerIllumination();
         checkIlluminationOff();
     }
@@ -874,7 +876,7 @@ private testHoliday(index) {
 }
 
 private beginHolidayPeriod() {
-    log.debug "Begin holiday period";
+    debug("Begin holiday period");
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
@@ -884,14 +886,14 @@ private beginHolidayPeriod() {
         def now = LocalDateTime.now();
 
         if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
-            log.debug "Holiday is active";
+            debug("Holiday is active");
 
             // We're going to start the display; unless it's static,
             // schedule the updates.
             def handlerName = "doLightUpdate";
             unschedule(handlerName);
             if( settings["holiday${currentHoliday}Display"] != STATIC && !state.test ) {
-                log.debug "Scheduling ${handlerName} every ${frequency} minutes";
+                debug("Scheduling ${handlerName} every ${frequency} minutes");
                 switch(Integer.parseInt(frequency)) {
                     case 1:
                         runEvery1Minute(handlerName);
@@ -925,7 +927,7 @@ private beginHolidayPeriod() {
 }
 
 private doLightUpdate() {
-    log.debug "Do light update";
+    debug("Do light update");
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
         // Assemble the list of devices to use.
@@ -943,11 +945,11 @@ private doLightUpdate() {
         def colors = getColorsForHoliday(currentHoliday, devices.size());
 
         // Apply the colors to the devices.
-        log.debug "Applying colors ${colors.inspect()} to devices ${devices.inspect()}";
+        debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
         [devices, colors].transpose().each {
             def device = it[0];
             def color = it[1];
-            log.debug "Setting ${device} to ${color}";
+            debug("Setting ${device} to ${color}");
             if( device && color ) {
                 device*.setColor(color);
             }
@@ -956,7 +958,7 @@ private doLightUpdate() {
 }
 
 private endHolidayPeriod() {
-    log.debug "End holiday period";
+    debug("End holiday period");
     state.currentHoliday = null;
     unschedule("doLightUpdate");
     lightsOff();
@@ -972,7 +974,7 @@ private getColorsForHoliday(index, desiredLength) {
             null
         }
     };
-    log.debug "Colors for holiday ${index}: ${colors.inspect()}";
+    debug("Colors for holiday ${index}: ${colors.inspect()}");
     colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
 
     def mode = settings["holiday${index}Rotation"];
@@ -989,46 +991,46 @@ private getColorsForHoliday(index, desiredLength) {
         Collections.shuffle(result);
     }
 
-    log.debug "Colors for holiday ${index}: ${result.inspect()}";
+    debug("Colors for holiday ${index}: ${result.inspect()}");
     def offset = 0;
     if( mode == SEQUENTIAL ) {
         offset = state.sequentialIndex ?: 0;
         state.sequentialIndex = (offset + 1) % (additional ?: 1);
-        log.debug "Starting from offset ${offset} (next is ${state.sequentialIndex})";
+        debug("Starting from offset ${offset} (next is ${state.sequentialIndex})");
     }
     def subList = result[offset..<(offset + desiredLength)];
-    log.debug "Sublist: ${subList.inspect()}";
+    debug("Sublist: ${subList.inspect()}");
     return subList;
 }
 
 private beginIlluminationPeriod() {
-    log.debug "Begin illumination period";
+    debug("Begin illumination period");
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
     if( motionTriggers.any {it.currentValue("motion") == "active"} ||
         contactTriggers.any {it.currentValue("contact") == "open"} ) {
-            log.debug "Motion or contact trigger is active when illumination period begins";
+            debug("Motion or contact trigger is active when illumination period begins");
             triggerIllumination();
     }
 }
 
 private endIlluminationPeriod() {
-    log.debug "End illumination period";
+    debug("End illumination period");
     unsubscribe(motionTriggers);
     unsubscribe(contactTriggers);
     turnOffIllumination();
 }
 
 private triggerIllumination(event = null) {
-    log.debug "Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : "");
+    debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = true;
     illuminationSwitch?.on();
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
     def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
-    log.debug "CT-capable devices: ${ctDevices.inspect()}";
+    debug("CT-capable devices: ${ctDevices.inspect()}");
     def rgbOnlyDevices = devices.minus(ctDevices);
-    log.debug "RGB devices: ${rgbOnlyDevices.inspect()}";
+    debug("RGB devices: ${rgbOnlyDevices.inspect()}");
 
     if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature, level, null);
     if( rgbOnlyDevices) {
@@ -1053,16 +1055,16 @@ private triggerIllumination(event = null) {
 }
 
 private checkIlluminationOff(event = null) {
-    log.debug "Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : "");
+    debug("Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : ""));
     if( !(motionTriggers.any {it.currentValue("motion") == "active"} ||
         contactTriggers.any {it.currentValue("contact") == "open"} ) ) {
-            log.debug "No motion or contact detected, turning off illumination in ${duration} minutes";
+            debug("No motion or contact detected, turning off illumination in ${duration} minutes");
             runIn(duration * 60, "turnOffIllumination");
     }
 }
 
 private turnOffIllumination(event = null) {
-    log.debug "Turning off illumination" + (event ? " after ${event.device} sent ${event.value}" : "");
+    debug("Turning off illumination" + (event ? " after ${event.device} sent ${event.value}" : ""));
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
@@ -1111,7 +1113,7 @@ private getHolidayDates(index) {
     if( getLocalTime("holidayStop")?.isBefore(getLocalTime("holidayStart")) ) {
         endDate = endDate.plusDays(1);
     }
-    log.debug "Holiday ${index} starts ${startDate} and ends ${endDate}";
+    debug("Holiday ${index} starts ${startDate} and ends ${endDate}");
 
     return [startDate, endDate];
 }
@@ -1124,34 +1126,34 @@ private getCurrentOrNextHoliday() {
         def dates = getHolidayDates(it);
         [it, dates[0], dates[1]]
     };
-    log.debug "Future holidays: ${futureHolidays}";
+    debug("Future holidays: ${futureHolidays}");
     def currentHolidays = futureHolidays.findAll{
         def startDate = it[1];
         def endDate = it[2];
         dateIsBetweenInclusive(today, startDate, endDate);
     };
-    log.debug "Current holidays: ${currentHolidays}";
+    debug("Current holidays: ${currentHolidays}");
     if( currentHolidays.size() ) {
         def result = currentHolidays.collect{
             [it[0], Period.between(it[1], it[2])]
         }.sort{ a,b -> a[1] <=> b[1] }.last();
-        log.debug "Current holiday: ${result}";
+        debug("Current holiday: ${result}");
         return result[0];
     }
     else if ( futureHolidays.size() ) {
         def result = futureHolidays.
             sort{ a,b -> a[1] <=> b[1] ?: a[2] <=> b[2] }.first();
-        log.debug "Next holiday: ${result}";
+        debug("Next holiday: ${result}");
         return result[0];
     }
     else {
-        log.debug "No holidays";
+        debug("No holidays");
         return null;
     }
 }
 
 private lightsOff() {
-    log.debug "Turning off lights";
+    debug("Turning off lights");
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
     if( devices ) devices*.off();
     if( otherIlluminationSwitches) otherIlluminationSwitches*.off();
@@ -1176,7 +1178,7 @@ private scheduleSunriseAndSunset(event = null) {
                 // Date in past; advance by a day
                 scheduleFirstFor = Date.from(scheduleFirstFor.toInstant().plus(Duration.ofDays(1)));
             }
-            log.debug "Scheduling ${prefix} for ${scheduleFirstFor} (${targetTime})";
+            debug("Scheduling ${prefix} for ${scheduleFirstFor} (${targetTime})");
             runOnce(scheduleFirstFor, handler);
         }
     }
@@ -1195,7 +1197,7 @@ private startFixedSchedules() {
         def handler = it[1];
         if( settings["${prefix}Time"] == CUSTOM ) {
             def time = getAsTimeString(prefix);
-            log.debug "Scheduling ${prefix} for ${time} (custom)";
+            debug("Scheduling ${prefix} for ${time} (custom)");
             schedule(time, handler);
         }
     }
@@ -1481,7 +1483,7 @@ private HSVtoRGB(Map hsv) {
     return "#" +
         [ r, g, b ].collect{
             def num = (int) Math.round(it * 255);
-            log.debug "${num} becomes ${String.format("%02x", num)}"
+            debug("${num} becomes ${String.format("%02x", num)}")
             String.format("%02x", num)
         }.join();
 }
