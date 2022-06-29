@@ -167,7 +167,7 @@ Map holidayDefinitions() {
                 )
                 input "testHoliday${i}", "button", title: "Test Holiday", submitOnChange: true, width: 4
                 paragraph "", width: 1
-                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; padding: 3px 16px 0 0'>"
+                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; margin: 8px 8px 0px -6px;'>"
                 input "deleteHoliday${i}", "button", title: "${delete} Delete", submitOnChange: true, width: 4
             }
         }
@@ -1573,13 +1573,13 @@ private static LocalDate roshHashanahForYear(int year) {
     LocalDate tentative = LocalDate.of(year, Month.SEPTEMBER, N);
 
     switch(tentative.getDayOfWeek()) {
-        case SUNDAY:
-        case WEDNESDAY:
-        case FRIDAY:
+        case DayOfWeek.SUNDAY:
+        case DayOfWeek.WEDNESDAY:
+        case DayOfWeek.FRIDAY:
             return tentative.plusDays(1);
-        case MONDAY:
+        case DayOfWeek.MONDAY:
             return tentative.plusDays((fraction > 0.898 && (12 * G) % 19 > 11) ? 1 : 0);
-        case TUESDAY:
+        case DayOfWeek.TUESDAY:
             return tentative.plusDays((fraction > 0.633 && (12 * G) % 19 > 6) ? 2 : 0);
         default:
             return tentative;
