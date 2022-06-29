@@ -631,6 +631,12 @@ private holidayDate(int i, String dateType, int year) {
                 case "easter":
                     result = easterForYear(year);
                     break;
+                case "passover":
+                    result = passoverForYear(year);
+                    break;
+                case "roshHashanah":
+                    result = roshHashanahForYear(year);
+                    break;
                 default:
                     log.warn "Unknown special ${special}"
             }
@@ -1330,7 +1336,9 @@ private LocalTime getLocalTime(prefix) {
 ];
 
 @Field static final Map SPECIALS = [
-    "easter": "Easter"
+    "easter": "Easter",
+    "passover": "Passover",
+    "roshHashanah": "Rosh Hashanah",
     // Others to be added later
 ]
 @Field static final Map COLORS = [
@@ -1404,7 +1412,27 @@ private Map GetHolidayByID(int id) {
         // 10
         [name: "Christmas", startDate: [type: ORDINAL, month: Month.NOVEMBER, weekday: DayOfWeek.THURSDAY, ordinal: 4, offset: 1],
             endDate: [type: FIXED, month: Month.DECEMBER, day: 26],
-            settings: [ type: RANDOM, colors: [COLORS["Red"], COLORS["Green"]]]]
+            settings: [ type: RANDOM, colors: [COLORS["Red"], COLORS["Green"]]]],
+        // 11
+        [name: "Valentine's Day", endDate: [type: FIXED, month: Month.FEBRUARY, day: 14],
+            settings: [ type: RANDOM, colors: [COLORS["Red"], COLORS["Pink"], COLORS["Raspberry"]]]],
+        // 12
+        [name: "Easter", endDate: [type: SPECIAL, special: "easter"], settings: [ type: STATIC, colors: [COLORS["White"], COLORS["Amber"]]]],
+        // 13
+        [name: "Holy Week", startDate: [type: SPECIAL, special: "easter", offset: -7],
+            endDate: [type: SPECIAL, special: "easter", offset: -1],
+            settings: [ type: STATIC, colors: [COLORS["Purple"]]]],
+        // 14
+        [name: "Pentecost", endDate: [type: SPECIAL, special: "easter", offset: 50], settings: [ type: STATIC, colors: [COLORS["Red"]]]],
+        // 15
+        [name: "Epiphany", endDate: [type: FIXED, month: Month.JANUARY, day: 6], settings: [ type: STATIC, colors: [COLORS["Green"]]]],
+        // 16
+        [name: "Passover", startDate: [type: SPECIAL, special: "passover", offset: -1],
+            endDate: [type: SPECIAL, special: "passover", offset: 7],
+            settings: [ type: STATIC, colors: [COLORS["Blue"], COLORS["Purple"]]]],
+        // 17
+        [name: "Rosh Hashanah", endDate: [type: SPECIAL, special: "roshHashanah"],
+            settings: [ type: STATIC, colors: [COLORS["Red"], COLORS["White"]]]],
     ];
     return MasterHolidayList[id];
 }
@@ -1412,16 +1440,13 @@ private Map GetHolidayByID(int id) {
 private Map GetDefaultHolidays() {
     final Map indices = [
         "United States": [
-            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11
         ],
         "Christian": [
-            10,
+            10, 12, 13, 14, 15
         ],
         "Jewish": [
-
-        ],
-        "Satanic Temple": [
-
+            16, 17
         ]
     ];
     return indices.collectEntries{
@@ -1505,4 +1530,61 @@ private static easterForYear(int Y) {
             }
         }
 }
+
+private static LocalDate passoverForYear(int Y) {
+    // Taken from https://webspace.science.uu.nl/~gent0113/easter/easter_text2a.htm
+    int MH, DH;
+    float A,B,P,S,Q,R,C,DMH;
+
+    A = (12*Y + 12) % 19;
+    B = Y % 4;
+    S = (5*(1979335 - 313*Y)+(765433 * A))/492480 + B/4;
+    Q = (float) Math.floor(S);
+    R = S - Q;
+    C = (Q + 3*Y + 5*B + 1) % 7;
+
+    float diff_jg = (float) Math.floor(Y/100) - (float) Math.floor(Y/400)-2;
+
+    DMH = Q + diff_jg + 92;
+    P = 0;
+    if((C == 2) || (C == 4) || (C == 6)) P=1;           // because of Adu
+    if((C == 1) && (A > 6) && (R > 1366/2160)) P=2;     // because of Gatarad
+    if((C == 0) && (A > 11) && (R > 23268/25920)) P=1;  // because of Batu Thakpad
+
+    DMH += P;
+    MH = (int) Math.floor((DMH - 62)/30.6);
+    DH = (int) Math.floor(DMH - 62 - 30.6*MH) + 1;
+    MH += 2;
+
+    return LocalDate.of(Y, MH, DH);
+}
+
+private static LocalDate roshHashanahForYear(int year) {
+    // Taken from https://quasar.as.utexas.edu/BillInfo/ReligiousCalendars.html
+    int Y = year - 1900;
+    int G = year % 19 + 1;
+    int S = (11*G - 6) % 30;
+
+    double nPlusFrac = 6.057778996 + 1.554241797*((12*G) % 19) + 0.25*(Y%4) - 0.003177794*Y;
+
+    int N = (int) Math.floor(nPlusFrac);
+    double fraction = nPlusFrac - N;
+
+    LocalDate tentative = LocalDate.of(year, Month.SEPTEMBER, N);
+
+    switch(tentative.getDayOfWeek()) {
+        case SUNDAY:
+        case WEDNESDAY:
+        case FRIDAY:
+            return tentative.plusDays(1);
+        case MONDAY:
+            return tentative.plusDays((fraction > 0.898 && (12 * G) % 19 > 11) ? 1 : 0);
+        case TUESDAY:
+            return tentative.plusDays((fraction > 0.633 && (12 * G) % 19 > 6) ? 2 : 0);
+        default:
+            return tentative;
+    }
+}
+
+
 // #endregion
