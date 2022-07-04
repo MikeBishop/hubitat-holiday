@@ -924,7 +924,7 @@ private beginHolidayPeriod() {
                 }
             }
             doLightUpdate();
-            if( switchesForHoliday) switchesForHoliday*.on();
+            switchesForHoliday*.on();
         }
     }
 }
@@ -953,7 +953,7 @@ private doLightUpdate() {
             def device = it[0];
             def color = it[1];
             debug("Setting ${device} to ${color}");
-            if( device && color ) {
+            if( color ) {
                 device*.setColor(color);
             }
         }
@@ -1035,7 +1035,7 @@ private triggerIllumination(event = null) {
     def rgbOnlyDevices = devices.minus(ctDevices);
     debug("RGB devices: ${rgbOnlyDevices.inspect()}");
 
-    if( ctDevices ) ctDevices*.setColorTemperature(colorTemperature, level, null);
+    ctDevices*.setColorTemperature(colorTemperature, level, null);
     if( rgbOnlyDevices) {
         try {
             def colorMap = evaluate(illuminationColor);
@@ -1045,7 +1045,7 @@ private triggerIllumination(event = null) {
             error(ex);
         }
     }
-    if( otherIlluminationSwitches) otherIlluminationSwitches*.on();
+    otherIlluminationSwitches*.on();
 
     subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
     subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
@@ -1158,9 +1158,9 @@ private getCurrentOrNextHoliday() {
 private lightsOff() {
     debug("Turning off lights");
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    if( devices ) devices*.off();
-    if( otherIlluminationSwitches) otherIlluminationSwitches*.off();
-    if( switchesForHoliday) switchesForHoliday*.off();
+    devices*.off();
+    otherIlluminationSwitches*.off();
+    switchesForHoliday*.off();
 }
 
 private scheduleSunriseAndSunset(event = null) {
