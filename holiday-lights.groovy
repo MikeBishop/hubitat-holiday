@@ -1164,35 +1164,49 @@ private lightsOff() {
 }
 
 private scheduleSunriseAndSunset(event = null) {
+    def sunrise = null;
+    def sunset = null;
     if( event ) {
         debug("Event ${event.name} says ${event.value}");
-        state[event.name] = event.value;
+    }
+    if( event?.name == "sunriseTime" ) {
+        sunrise = toDateTime(event.value);
+    }
+    else if( event?.name == "sunsetTime" ) {
+        sunset = toDateTime(event.value);
+    }
+    else {
+        // No event; do both.
+        sunrise = toDateTime(
+            getLocationEventsSince("sunriseTime", new Date() - 2, [max: 1])[0]?.value
+        );
+        sunset = toDateTime(
+            getLocationEventsSince("sunsetTime", new Date() - 2, [max: 1])[0]?.value
+        );
+        debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location events");
     }
     // Sunrise/sunset just changed, so schedule the upcoming events...
     PREFIX_AND_HANDLERS.each {
         def prefix = it[0];
         def handler = it[1];
         def targetTime = settings["${prefix}Time"];
-        if ( targetTime != CUSTOM ) {
-            def offset = settings["${prefix}TimeOffset"];
-            def sunriseSunset = getSunriseAndSunset();
-            debug("${prefix} time: ${targetTime} with offset ${offset} minutes");
+        if ( (targetTime == SUNRISE  && sunrise != null) ||
+             (targetTime == SUNSET && sunset != null) ) {
+            def offset = settings["${prefix}TimeOffset"] ?: 0;
 
-            def scheduleFirstFor = targetTime == SUNRISE ?
-                // Sunrise
-                state.sunriseTime ?: sunriseSunset.sunrise :
-                // Sunset
-                state.sunsetTime ?: sunriseSunset.sunset;
+            def scheduleFor = targetTime == SUNRISE ? sunrise : sunset;
 
             // Apply offset
-            scheduleFirstFor = Date.from(scheduleFirstFor.toInstant().plus(Duration.ofMinutes(offset ?: 0)));
+            scheduleFor = Date.from(scheduleFor.toInstant().plus(Duration.ofMinutes(offset ?: 0)));
 
-            if( scheduleFirstFor < new Date() ) {
+            // Should no longer happen, but just in case...
+            if( scheduleFor < new Date() ) {
                 // Date in past; advance by a day
-                scheduleFirstFor = Date.from(scheduleFirstFor.toInstant().plus(Duration.ofDays(1)));
+                scheduleFor = Date.from(scheduleFor.toInstant().plus(Duration.ofDays(1)));
             }
-            debug("Scheduling ${prefix} for ${scheduleFirstFor} (${targetTime})");
-            runOnce(scheduleFirstFor, handler);
+
+            debug("Scheduling ${prefix} for ${scheduleFor} (${targetTime} with ${offset} minutes offset)");
+            runOnce(scheduleFor, handler);
         }
     }
 }
