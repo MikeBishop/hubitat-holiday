@@ -895,7 +895,7 @@ private beginHolidayPeriod() {
             // schedule the updates.
             def handlerName = "doLightUpdate";
             unschedule(handlerName);
-            if( settings["holiday${currentHoliday}Display"] != STATIC && !state.test ) {
+            if( frequency && settings["holiday${currentHoliday}Display"] != STATIC && !state.test ) {
                 debug("Scheduling ${handlerName} every ${frequency} minutes");
                 switch(Integer.parseInt(frequency)) {
                     case 1:
