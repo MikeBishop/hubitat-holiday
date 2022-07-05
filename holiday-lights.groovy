@@ -60,11 +60,13 @@ Map mainPage() {
                 name: "illuminationConfigHref",
                 page: "illuminationConfig",
                 title: "Non-Holiday Illumination",
+                description: "When should lights be turned to white for normal illumination?"
             )
             href(
                 name: "holidaySelectionHref",
                 page: "holidayDefinitions",
                 title: "Holiday Displays",
+                description: "What colors on what special days?"
             )
 
             input "debugSpew", "bool", title: "Log debug messages?",
