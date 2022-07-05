@@ -547,6 +547,7 @@ Map illuminationConfig() {
             selectStartStopTimes("illumination", "Allow triggers");
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights", multiple: true
+            input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
             input "duration", "number", title: "How long to stay illuminated after motion stops / contact is closed?"
         }
         def devices = state.deviceIndices.collect{settings["device${it}"]};
@@ -1016,17 +1017,25 @@ private beginIlluminationPeriod() {
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
-    if( motionTriggers.any {it.currentValue("motion") == "active"} ||
-        contactTriggers.any {it.currentValue("contact") == "open"} ) {
-            debug("Motion or contact trigger is active when illumination period begins");
+    subscribe(lockTriggers, "lock.unlocked", "triggerIllumination");
+    if( anyIlluminationTriggers() ) {
+            debug("Sensor trigger is active when illumination period begins");
             triggerIllumination();
     }
+}
+
+private anyIlluminationTriggers() {
+    return
+        motionTriggers.any {it.currentValue("motion") == "active"} ||
+        contactTriggers.any {it.currentValue("contact") == "open"} ||
+        lockTriggers.any {it.currentValue("lock") == "unlocked" || it.currentValue("lock") == "unlocked with timeout"};
 }
 
 private endIlluminationPeriod() {
     debug("End illumination period");
     unsubscribe(motionTriggers);
     unsubscribe(contactTriggers);
+    unsubscribe(lockTriggers);
     turnOffIllumination();
 }
 
@@ -1054,6 +1063,7 @@ private triggerIllumination(event = null) {
 
     subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
     subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
+    subscribe(lockTriggers, "lock.locked", "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unschedule("doLightUpdate");
@@ -1064,9 +1074,11 @@ private triggerIllumination(event = null) {
 
 private checkIlluminationOff(event = null) {
     debug("Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    if( !(motionTriggers.any {it.currentValue("motion") == "active"} ||
-        contactTriggers.any {it.currentValue("contact") == "open"} ) ) {
-            debug("No motion or contact detected, turning off illumination in ${duration} minutes");
+    if( !anyIlluminationTriggers() ) {
+            debug("No sensor activity detected, turning off illumination in ${duration} minutes");
+            unsubscribe(motionTriggers, "motion.inactive");
+            unsubscribe(contactTriggers, "contact.closed");
+            unsubscribe(lockTriggers, "lock.locked");
             runIn(duration * 60, "turnOffIllumination");
     }
 }
@@ -1076,8 +1088,6 @@ private turnOffIllumination(event = null) {
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
-    unsubscribe(motionTriggers, "motion.inactive");
-    unsubscribe(contactTriggers, "contact.closed");
 
     def currentOrNext = getCurrentOrNextHoliday();
     def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
