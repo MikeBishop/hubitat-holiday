@@ -549,7 +549,7 @@ Map illuminationConfig() {
             selectStartStopTimes("illumination", "Allow triggers");
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights", multiple: true
-            input "duration", "number", title: "How long to stay illuminated after motion stops / contact is closed?"
+            input "duration", "number", title: "How many minutes to stay illuminated after motion stops / contact is closed?"
         }
         def devices = state.deviceIndices.collect{settings["device${it}"]};
         debug("${devices}");
