@@ -1141,12 +1141,16 @@ private getCurrentOrNextHoliday() {
         dateIsBetweenInclusive(today, startDate, endDate);
     };
     debug("Current holidays: ${currentHolidays}");
-    if( currentHolidays.size() ) {
+    if( currentHolidays.size() > 1 ) {
         def result = currentHolidays.collect{
             [it[0], Period.between(it[1], it[2])]
         }.sort{ a,b -> a[1] <=> b[1] }.last();
-        debug("Current holiday: ${result}");
+        debug("Selected holiday: ${result}");
         return result[0];
+    }
+    else if ( currentHolidays.size() == 1 ) {
+        debug("Selected holiday: ${currentHolidays[0]}");
+        return currentHolidays[0];
     }
     else if ( futureHolidays.size() ) {
         def result = futureHolidays.
