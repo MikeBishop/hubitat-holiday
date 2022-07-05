@@ -60,11 +60,13 @@ Map mainPage() {
                 name: "illuminationConfigHref",
                 page: "illuminationConfig",
                 title: "Non-Holiday Illumination",
+                description: "When should lights be turned to white for normal illumination?"
             )
             href(
                 name: "holidaySelectionHref",
                 page: "holidayDefinitions",
                 title: "Holiday Displays",
+                description: "What colors on what special days?"
             )
 
             input "debugSpew", "bool", title: "Log debug messages?",
@@ -548,7 +550,7 @@ Map illuminationConfig() {
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights", multiple: true
             input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
-            input "duration", "number", title: "How long to stay illuminated after motion stops / contact is closed?"
+            input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
         }
         def devices = state.deviceIndices.collect{settings["device${it}"]};
         debug("${devices}");
