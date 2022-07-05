@@ -980,6 +980,11 @@ private getColorsForHoliday(index, desiredLength) {
     debug("Colors for holiday ${index}: ${colors.inspect()}");
     colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
 
+    if( colors.size() <= 0 ) {
+        error("No colors found for holiday ${index}");
+        return null;
+    }
+
     def mode = settings["holiday${index}Rotation"];
     def additional = 0;
     if( mode == SEQUENTIAL ) {
