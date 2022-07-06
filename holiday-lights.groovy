@@ -573,22 +573,20 @@ Map illuminationConfig() {
 }
 
 private selectStartStopTimes(prefix, description) {
-            input "${prefix}StartTime", "enum", title: "${description} from...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            input "${prefix}StopTime", "enum", title: "${description} until...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            if( settings["${prefix}StartTime"] == CUSTOM ) {
-                input "${prefix}StartTimeCustom", "time", title: "Specify start time:", width: 6
-            }
-            else {
-                input "${prefix}StartTimeOffset", "number", title: "Start time offset in minutes:", width: 6, range: "-240:240"
-            }
-            if( settings["${prefix}StopTime"] == CUSTOM ) {
-                input "${prefix}StopTimeCustom", "time", title: "Specify stop time:", width: 6
-            }
-            else {
-                input "${prefix}StopTimeOffset", "number", title: "Stop time offset in minutes:", width: 6, range: "-240:240"
-            }
+    input "${prefix}StartTime", "enum", title: "${description} from...",
+        width: 6, options: TIME_OPTIONS, submitOnChange: true
+    input "${prefix}StopTime", "enum", title: "${description} until...",
+        width: 6, options: TIME_OPTIONS, submitOnChange: true
+    ["Start", "Stop"].each {
+        if( settings["${prefix}${it}Time"] == CUSTOM ) {
+            input "${prefix}${it}TimeCustom", "time", title: "Specify ${it.toLowerCase()} time:", width: 6
+        }
+        else if (settings["${prefix}${it}Time"]) {
+            input "${prefix}${it}TimeOffset", "number", title: "Start ${it.toLowerCase()} offset in minutes:", width: 6, range: "-240:240"
+        }
+    }
+    input "${prefix}Modes", "enum", title: "${description} during the following modes, regardless of time...",
+        width: 6, options: location.getModes()*.toString(), multiple: true
 }
 
 private holidayIsValid(int i) {
@@ -818,7 +816,11 @@ void debug(String msg) {
 }
 
 void error(Exception ex) {
-    log.error "${ex} at ${ex.getStackTrace()}"
+    error("${ex} at ${ex.getStackTrace()}");
+}
+
+void error(String msg) {
+    log.error(msg);
 }
 
 // #region Event Handlers
@@ -848,6 +850,9 @@ void beginStateMachine() {
     // ...and listen to the event to schedule future iterations.
     subscribe(location, "sunriseTime", "scheduleSunriseAndSunset");
     subscribe(location, "sunsetTime", "scheduleSunriseAndSunset");
+
+    // If modes configured, listen for mode changes.
+    subscribe(location, "mode", "onModeChange");
 
     // If switch is on, or sensors are triggered, we're in illumination mode
     if( illuminationSwitch?.currentValue("switch") == "on" ||
@@ -880,14 +885,25 @@ private testHoliday(index) {
     runIn(60, "beginStateMachine");
 }
 
+private onModeChange(evt) {
+    if( duringIlluminationPeriod() ) {
+        beginIlluminationPeriod();
+    }
+    else {
+        // End Illumination will check for active holiday; no need to
+        // handle that case explicitly.
+        endIlluminationPeriod();
+    }
+}
+
 private beginHolidayPeriod() {
     debug("Begin holiday period");
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
         def dates = getHolidayDates(currentHoliday);
-        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart"));
-        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop"));
+        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
+        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
         def now = LocalDateTime.now();
 
         if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
@@ -951,19 +967,21 @@ private doLightUpdate() {
 
         // Apply the colors to the devices.
         debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
-        [devices, colors].transpose().each {
-            def device = it[0];
-            def color = it[1];
-            debug("Setting ${device} to ${color}");
-            if( color ) {
-                device*.setColor(color);
+        if( devices && colors ) {
+            [devices, colors].transpose().each {
+                def device = it[0];
+                def color = it[1];
+                debug("Setting ${device} to ${color}");
+                if( color ) {
+                    device*.setColor(color);
+                }
             }
         }
     }
 }
 
 private endHolidayPeriod() {
-    debug("End holiday period");
+    debug("Not in holiday period");
     state.currentHoliday = null;
     unschedule("doLightUpdate");
     lightsOff();
@@ -1026,10 +1044,13 @@ private beginIlluminationPeriod() {
 }
 
 private endIlluminationPeriod() {
-    debug("End illumination period");
-    unsubscribe(motionTriggers);
-    unsubscribe(contactTriggers);
-    turnOffIllumination();
+    if( !duringIlluminationPeriod() ) {
+        debug("End illumination period");
+        // Unsubscribe from the triggers
+        unsubscribe(motionTriggers, "motion.active", "triggerIllumination");
+        unsubscribe(contactTriggers, "contact.open", "triggerIllumination");
+        turnOffIllumination();
+    }
 }
 
 private triggerIllumination(event = null) {
@@ -1059,9 +1080,6 @@ private triggerIllumination(event = null) {
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unschedule("doLightUpdate");
-
-    //checkIlluminationOff();
-    // Try not checking this, so the switch keeps lights on.
 }
 
 private checkIlluminationOff(event = null) {
@@ -1081,16 +1099,22 @@ private turnOffIllumination(event = null) {
     unsubscribe(motionTriggers, "motion.inactive");
     unsubscribe(contactTriggers, "contact.closed");
 
-    def currentOrNext = getCurrentOrNextHoliday();
-    def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
-    if( !duringHolidayPeriod() || holidayDates == null ||
-            !dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) ) {
+    if( !duringHolidayPeriod() ) {
         // Lights Off
-        lightsOff();
+        endHolidayPeriod();
     }
     else {
-        // Lights On
-        beginHolidayPeriod();
+        def currentOrNext = getCurrentOrNextHoliday();
+        def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
+        if ( holidayDates && dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) )
+        {
+            // Lights On
+            beginHolidayPeriod();
+        }
+        else {
+            // No holiday to show; Lights Off
+            lightsOff();
+        }
     }
 }
 
@@ -1255,22 +1279,6 @@ private getAsTimeString(prefix) {
     return null;
 }
 
-private LocalDateTime getIlluminationStart() {
-    return getLocalTimeToday("illuminationStart");
-}
-
-private LocalDateTime getIlluminationStop() {
-    return getLocalTimeToday("illuminationStop");
-}
-
-private LocalDateTime getHolidayStart() {
-    return getLocalTimeToday("holidayStart");
-}
-
-private LocalDateTime getHolidayStop() {
-    return getLocalTimeToday("holidayStop");
-}
-
 private Boolean duringHolidayPeriod() {
     return duringPeriod("holiday");
 }
@@ -1282,10 +1290,17 @@ private Boolean duringIlluminationPeriod() {
 private Boolean duringPeriod(prefix) {
     def beginTime = getLocalTimeToday("${prefix}Start");
     def endTime = getLocalTimeToday("${prefix}Stop");
+    def activeModes = settings["${prefix}Modes"];
     def reverseResults = false;
 
+    if( activeModes?.contains(location.getMode().toString()) ) {
+        return true;
+    }
+
     if( !beginTime || !endTime ) {
-        log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
+        if( !activeModes ) {
+            log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
+        }
         return false;
     }
 
