@@ -1156,13 +1156,13 @@ private getCurrentOrNextHoliday() {
     if( currentHolidays.size() > 1 ) {
         def result = currentHolidays.collect{
             [it[0], Period.between(it[1], it[2])]
-        }.sort{ a,b -> a[1] <=> b[1] }.last();
+        }.sort{ a,b -> a[1] <=> b[1] }.first();
         debug("Selected holiday: ${result}");
         return result[0];
     }
     else if ( currentHolidays.size() == 1 ) {
         debug("Selected holiday: ${currentHolidays[0]}");
-        return currentHolidays[0];
+        return currentHolidays.first()[0];
     }
     else if ( futureHolidays.size() ) {
         def result = futureHolidays.
