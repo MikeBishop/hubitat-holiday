@@ -1145,7 +1145,7 @@ private getCurrentOrNextHoliday() {
     debug("Current holidays: ${currentHolidays}");
     if( currentHolidays.size() > 1 ) {
         def result = currentHolidays.collect{
-            [it[0], Duration.between(it[1], it[2])]
+            [it[0], Duration.between(it[1].atStartOfDay(), it[2].atStartOfDay())]
         }.sort{ a,b -> a[1] <=> b[1] }.first();
         debug("Selected holiday: ${result}");
         return result[0];
