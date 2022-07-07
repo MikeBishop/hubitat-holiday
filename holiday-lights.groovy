@@ -1030,7 +1030,7 @@ private anyIlluminationTriggers() {
     return
         motionTriggers.any {it.currentValue("motion") == "active"} ||
         contactTriggers.any {it.currentValue("contact") == "open"} ||
-        lockTriggers.any {it.currentValue("lock") == "unlocked" || it.currentValue("lock") == "unlocked with timeout"};
+        lockTriggers.any {it.currentValue("lock").startsWith("unlocked")};
 }
 
 private endIlluminationPeriod() {
