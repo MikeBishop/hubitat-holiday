@@ -835,7 +835,7 @@ void beginStateMachine() {
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
     if( illuminationSwitch ) {
-        subscribe(illuminationSwitch, "switch.on", "triggerIllumination");
+        subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
     }
     if( duringIlluminationPeriod() ) {
         beginIlluminationPeriod();
@@ -850,16 +850,9 @@ void beginStateMachine() {
     subscribe(location, "sunriseTime", "scheduleSunriseAndSunset");
     subscribe(location, "sunsetTime", "scheduleSunriseAndSunset");
 
-    // If switch is on, or sensors are triggered, we're in illumination mode
-    if( illuminationSwitch?.currentValue("switch") == "on" ||
-        motionTriggers.any {it.currentValue("motion") == "active"} ||
-        contactTriggers.any {it.currentValue("contact") == "open"} ) {
-            state.illuminationMode = true;
-    }
     // Handle that immediately.
     if( state.illuminationMode ) {
         debug("Illumination mode is on when starting");
-        triggerIllumination();
         checkIlluminationOff();
     }
     else {
@@ -1028,6 +1021,7 @@ private beginIlluminationPeriod() {
 
 private anyIlluminationTriggers() {
     return
+        illuminationSwitch?.currentValue("switch") == "on" ||
         motionTriggers.any {it.currentValue("motion") == "active"} ||
         contactTriggers.any {it.currentValue("contact") == "open"} ||
         lockTriggers.any {it.currentValue("lock").startsWith("unlocked")};
@@ -1035,9 +1029,6 @@ private anyIlluminationTriggers() {
 
 private endIlluminationPeriod() {
     debug("End illumination period");
-    unsubscribe(motionTriggers);
-    unsubscribe(contactTriggers);
-    unsubscribe(lockTriggers);
     turnOffIllumination();
 }
 
@@ -1090,6 +1081,11 @@ private turnOffIllumination(event = null) {
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
+    if( !duringIlluminationPeriod() ) {
+        unsubscribe(motionTriggers);
+        unsubscribe(contactTriggers);
+        unsubscribe(lockTriggers);
+    }
 
     def currentOrNext = getCurrentOrNextHoliday();
     def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
