@@ -12,5 +12,6 @@ This app performs two related functions with a set of RGB lights:
 
 # Change Log
 
-* [6/28/2022] Initial release
-* [7/5/2022]  Multiple bugs fixed; improved sunrise/sunset handling
+* [6/28/2022]   Initial release
+* [7/5/2022]    Multiple bugs fixed; improved sunrise/sunset handling
+* [7/8/2022]    More bug fixes; added lock unlocked as illumination trigger

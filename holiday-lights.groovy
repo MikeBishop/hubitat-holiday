@@ -547,8 +547,8 @@ Map illuminationConfig() {
         }
         section("Triggered Configuration") {
             selectStartStopTimes("illumination", "Allow triggers");
-            input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights", multiple: true
-            input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights", multiple: true
+            input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
+            input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
             input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
             input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
         }
