@@ -1025,24 +1025,30 @@ private getColorsForHoliday(index, desiredLength) {
     return subList;
 }
 
-private beginIlluminationPeriod() {
-    debug("Begin illumination period");
+private beginIlluminationPeriod(event = null) {
+    debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
     subscribe(lockTriggers, "lock.unlocked", "triggerIllumination");
-    if( anyIlluminationTriggers() ) {
-            debug("Sensor trigger is active when illumination period begins");
-            triggerIllumination();
+    if( illuminationSwitch?.currentValue("switch") == "on" ||
+        anyIlluminationTriggers()
+    ) {
+        debug("Sensor trigger is active");
+        triggerIllumination();
     }
 }
 
 private anyIlluminationTriggers() {
-    return
-        illuminationSwitch?.currentValue("switch") == "on" ||
-        motionTriggers.any {it.currentValue("motion") == "active"} ||
-        contactTriggers.any {it.currentValue("contact") == "open"} ||
-        lockTriggers.any {it.currentValue("lock").startsWith("unlocked")};
+    def motion = motionTriggers.any { it.currentValue("motion") == "active" };
+    def contact = contactTriggers.any { it.currentValue("contact") == "open" };
+    def lock = lockTriggers.any { it.currentValue("lock").startsWith("unlocked") };
+
+    debug "Motion: ${motion}, ${motionTriggers ? motionTriggers*.currentValue("motion") : "none"}";
+    debug "Contact: ${contact}, ${contactTriggers ? contactTriggers*.currentValue("contact") : "none"}";
+    debug "Lock: ${lock}, ${lockTriggers ? lockTriggers*.currentValue("lock") : "none"}";
+
+    return motion || contact || lock;
 }
 
 private endIlluminationPeriod() {
