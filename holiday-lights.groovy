@@ -138,7 +138,6 @@ Map holidayDefinitions() {
                 // List colors here!
                 def colorDescription = "No colors yet. Add some!"
                 def colorsForThisHoliday = state.colorIndices["${i}"];
-                debug("Colors for ${i} are ${colorsForThisHoliday}")
                 if( colorsForThisHoliday?.size() && colorsForThisHoliday.every {
                     settings["holiday${i}Color${it}"] != null
                 } ) {
@@ -740,13 +739,11 @@ private StringifyDate(int index) {
     if( settings["holiday${index}Span"] ) {
         dates.add(0, "Start");
     }
-    debug("Dates are ${dates}")
     dates.collect {
         try {
             def result = ""
             if( settings["holiday${index}${it}Type"] != SPECIAL ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
-                debug("Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}")
                 def monthEnum = unarray(settings["holiday${index}${it}Month"]);
                 def month = Month.valueOf(monthEnum);
                 def monthString = LocalDate.now().with(month).format(formatter);
@@ -762,7 +759,6 @@ private StringifyDate(int index) {
 
                 if( settings["holiday${index}${it}Type"] == ORDINAL ) {
                     def ordinal = unarray(settings["holiday${index}${it}Ordinal"]);
-                    debug("Ordinal is ${ordinal} -> ${ORDINALS[ordinal]}")
                     result += "${ORDINALS[ordinal]} ";
                     def formatter = DateTimeFormatter.ofPattern("EEEE");
                     def dayEnum = unarray(settings["holiday${index}${it}Weekday"]);
