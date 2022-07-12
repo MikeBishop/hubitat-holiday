@@ -135,7 +135,6 @@ Map holidayDefinitions() {
                 title: "Other switches to turn on when holiday lights are active"
         }
 
-        debug("Indices are ${state.holidayIndices.inspect()}")
         debug("Colors are ${state.colorIndices.inspect()}")
         state.holidayIndices?.each { int i ->
             def title = "${settings["holiday${i}Name"]}"
