@@ -28,6 +28,7 @@ preferences {
 }
 
 Map mainPage() {
+    debug("Rendering mainPage");
     dynamicPage(name: "mainPage", title: "Holiday Lighting", install: true, uninstall: true) {
         initialize();
         section("Options") {
@@ -73,9 +74,11 @@ Map mainPage() {
                 submitOnChange: true, defaultValue: false;
         }
     }
+    debug("Finished with mainPage");
 }
 
 Map deviceSelection() {
+    debug("Rendering deviceSelection");
     dynamicPage(name: "deviceSelection", title: "Devices to Use") {
         section("Devices for Holiday Display") {
             def key;
@@ -113,9 +116,11 @@ Map deviceSelection() {
             }
         }
     }
+    debug("Finished with deviceSelection");
 }
 
 Map holidayDefinitions() {
+    debug("Rendering holidayDefinitions");
     dynamicPage(name: "holidayDefinitions", title: "Configure Holiday Displays") {
         sortHolidays()
         if( !state.colorIndices ) {
@@ -195,11 +200,12 @@ Map holidayDefinitions() {
                 )
             }
         }
-        debug("Finished page")
     }
+    debug("Finished with holidayDefinitions");
 }
 
 Map pageImport() {
+    debug("Rendering pageImport");
     dynamicPage(name: "pageImport", title: "Holiday Import progress") {
         def alreadyImported = state.imported ?: [:];
         importSelected.each {
@@ -272,9 +278,11 @@ Map pageImport() {
         }
         app.clearSetting("importSelected")
     }
+    debug("Finished with pageImport");
 }
 
 def pageEditHoliday(params) {
+    debug("Rendering pageEditHoliday");
     Integer i
     if( params.holidayIndex != null ) {
         i = params.holidayIndex
@@ -340,9 +348,11 @@ def pageEditHoliday(params) {
             }
         }
     }
+    debug("Finished with pageEditHoliday");
 }
 
 def pageColorSelect(params) {
+    debug("Rendering pageColorSelect");
     int i;
     if( params?.holidayIndex != null ) {
         i = params.holidayIndex
@@ -401,6 +411,7 @@ def pageColorSelect(params) {
             input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
         }
     }
+    debug("Finished with pageColorSelect");
 }
 
 @Field final static String PICKER_JS = '''
@@ -539,6 +550,7 @@ ${colorOptions}
 }
 
 Map illuminationConfig() {
+    debug("Rendering illuminationConfig");
     dynamicPage(name: "illuminationConfig", title: "Illumination Configuration") {
         section("Switch Configuration") {
             input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
@@ -570,6 +582,7 @@ Map illuminationConfig() {
             }
         }
     }
+    debug("Finished with illuminationConfig");
 }
 
 private selectStartStopTimes(prefix, description) {
@@ -669,6 +682,7 @@ private sortHolidays() {
 }
 
 void appButtonHandler(btn) {
+    debug("Button ${btn} pressed");
     if( btn.startsWith("deleteHoliday") ) {
         // Extract index
         def parts = btn.minus("deleteHoliday").split("Color")
@@ -691,6 +705,7 @@ void appButtonHandler(btn) {
 }
 
 private AddColorToHoliday(int holidayIndex) {
+    debug("Adding color to holiday ${holidayIndex}");
     if( !state.nextColorIndices ) {
         state.nextColorIndices = [:];
     }
@@ -698,7 +713,6 @@ private AddColorToHoliday(int holidayIndex) {
     def nextColor = state.nextColorIndices["${holidayIndex}"] ?: 0;
     def indicesForHoliday = state.colorIndices["${holidayIndex}"];
 
-    debug("indicesForHoliday is ${indicesForHoliday.inspect()}")
     if( indicesForHoliday ) {
         indicesForHoliday.add(nextColor);
         state.colorIndices["${holidayIndex}"] = indicesForHoliday;
@@ -712,7 +726,7 @@ private AddColorToHoliday(int holidayIndex) {
 }
 
 private DeleteHoliday(int index) {
-    debug("Deleting ${index}");
+    debug("Deleting holiday ${index}");
     state.holidayIndices.removeElement(index);
     settings.keySet().findAll{
         it.startsWith("holiday${index}") &&
@@ -726,8 +740,9 @@ private DeleteHoliday(int index) {
 }
 
 private DeleteColor(int holidayIndex, int colorIndex) {
-    app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
+    debug("Deleting color ${colorIndex} from holiday ${holidayIndex}");
     state.colorIndices["${holidayIndex}"].removeElement(colorIndex);
+    app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
 }
 
 private StringifyDate(int index) {
