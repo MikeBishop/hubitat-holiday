@@ -658,7 +658,9 @@ private sortHolidays() {
     def thisYear = LocalDate.now().getYear()
     def originalList = state.holidayIndices
     debug("Sorting holidays: ${originalList.inspect()}....")
-    def sortedList = originalList.collect{
+    def invalid = originalList.findAll{!holidayIsValid(it)};
+    invalid.each{ log.warn "Invalid holiday ${it}"; DeleteHoliday(it); }
+    def sortedList = originalList.minus(invalid).collect{
             [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
         }.sort{ a,b ->
             a[2] <=> b[2] ?: a[1] <=> b[1]
@@ -712,6 +714,7 @@ private AddColorToHoliday(int holidayIndex) {
 
 private DeleteHoliday(int index) {
     debug("Deleting ${index}");
+    state.holidayIndices.removeElement(index);
     settings.keySet().findAll{
         it.startsWith("holiday${index}") &&
         !(it.minus("holiday${index}")[0] as char).isDigit()
@@ -719,7 +722,6 @@ private DeleteHoliday(int index) {
         debug("Removing setting ${it}")
         app.removeSetting(it);
     }
-    state.holidayIndices.removeElement(index);
     state.colorIndices.remove("${index}");
     state.imported.remove("${index}");
 }
@@ -731,6 +733,10 @@ private DeleteColor(int holidayIndex, int colorIndex) {
 
 private StringifyDate(int index) {
     def dates = ["End"];
+    if( !holidayIsValid(index) ) {
+        return "Invalid date";
+    }
+
     if( settings["holiday${index}Span"] ) {
         dates.add(0, "Start");
     }
@@ -1116,7 +1122,7 @@ private turnOffIllumination(event = null) {
     }
     else {
         def currentOrNext = getCurrentOrNextHoliday();
-        def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
+        def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : [];
         if ( holidayDates && dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) )
         {
             // Lights On
@@ -1130,8 +1136,8 @@ private turnOffIllumination(event = null) {
 }
 
 private dateIsBetweenInclusive(date, start, end) {
-    return (date.isEqual(start) || date.isAfter(start)) &&
-        (date.isBefore(end) || date.isEqual(end));
+    return start && end && (date?.isEqual(start) || date?.isAfter(start)) &&
+        (date?.isBefore(end) || date?.isEqual(end));
 }
 
 private getHolidayDates(index) {
@@ -1141,6 +1147,11 @@ private getHolidayDates(index) {
 
     def startDate = holidayDate(index, "Start", thisYear);
     def endDate = holidayDate(index, "End", thisYear);
+
+    if( !startDate || !endDate ) {
+        // If calculations failed, don't try to do any fixups.
+        return [];
+    }
 
     // If the end date is before the start date, it crosses the year boundary.
     if( endDate.isBefore(startDate) ) {
