@@ -73,8 +73,8 @@ Map mainPage() {
             input "debugSpew", "bool", title: "Log debug messages?",
                 submitOnChange: true, defaultValue: false;
         }
+        debug("Finished with mainPage");
     }
-    debug("Finished with mainPage");
 }
 
 Map deviceSelection() {
@@ -115,8 +115,8 @@ Map deviceSelection() {
                     multiple: false, submitOnChange: true
             }
         }
+        debug("Finished with deviceSelection");
     }
-    debug("Finished with deviceSelection");
 }
 
 Map holidayDefinitions() {
@@ -200,8 +200,8 @@ Map holidayDefinitions() {
                 )
             }
         }
+        debug("Finished with holidayDefinitions");
     }
-    debug("Finished with holidayDefinitions");
 }
 
 Map pageImport() {
@@ -277,8 +277,8 @@ Map pageImport() {
             state.imported = alreadyImported;
         }
         app.clearSetting("importSelected")
+        debug("Finished with pageImport");
     }
-    debug("Finished with pageImport");
 }
 
 def pageEditHoliday(params) {
@@ -347,8 +347,8 @@ def pageEditHoliday(params) {
                 input "holiday${i}${date}Offset", "number", title: "Offset (optional)", range:"-60..60"
             }
         }
+        debug("Finished with pageEditHoliday");
     }
-    debug("Finished with pageEditHoliday");
 }
 
 def pageColorSelect(params) {
@@ -410,8 +410,8 @@ def pageColorSelect(params) {
             input "testHoliday${i}", "button", title: "Test Holiday", submitOnChange: true
             input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
         }
+        debug("Finished with pageColorSelect");
     }
-    debug("Finished with pageColorSelect");
 }
 
 @Field final static String PICKER_JS = '''
@@ -581,8 +581,8 @@ Map illuminationConfig() {
                 paragraph PICKER_JS, width:1;
             }
         }
+        debug("Finished with illuminationConfig");
     }
-    debug("Finished with illuminationConfig");
 }
 
 private selectStartStopTimes(prefix, description) {
