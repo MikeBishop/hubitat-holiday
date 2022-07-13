@@ -896,6 +896,7 @@ private testHoliday(index) {
 }
 
 private onModeChange(evt) {
+    debug("Mode changed to ${location.getMode().toString()}");
     if( duringIlluminationPeriod() ) {
         beginIlluminationPeriod();
     }
