@@ -869,7 +869,9 @@ void beginStateMachine() {
     subscribe(location, "sunsetTime", "scheduleSunriseAndSunset");
 
     // Listen for mode changes.
-    subscribe(location, "mode", "onModeChange");
+    if( illuminationModes || holidayModes ) {
+        subscribe(location, "mode", "onModeChange");
+    }
 
     // If illumination mode is active, should it be?
     if( state.illuminationMode ) {
