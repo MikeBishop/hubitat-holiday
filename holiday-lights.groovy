@@ -1001,7 +1001,13 @@ private endHolidayPeriod() {
 private getColorsForHoliday(index, desiredLength) {
     def colors = state.colorIndices["${index}"].collect{
         try {
-            evaluate(settings["holiday${index}Color${it}"])
+            def mapText = settings["holiday${index}Color${it}"];
+            if( mapText ) {
+                evaluate(mapText)
+            }
+            else {
+                null
+            }
         }
         catch(Exception ex) {
             error(ex);
