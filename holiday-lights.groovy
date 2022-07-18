@@ -556,6 +556,10 @@ Map illuminationConfig() {
             input "otherIlluminationSwitches", "capability.switch", title: "Other switches to turn on when triggered", multiple: true
         }
         section("Triggered Configuration") {
+            input "illuminationIdleBehavior", "enum", title: "Behavior when not triggered", defaultValue: OFF, options: [
+                OFF: "Off unless holiday active",
+                ON: "On unless holiday active"
+            ]
             selectStartStopTimes("illumination", "Allow triggers");
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
@@ -997,7 +1001,7 @@ private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
     unschedule("doLightUpdate");
-    lightsOff();
+    returnLightsToIdle();
 }
 
 private getColorsForHoliday(index, desiredLength) {
@@ -1149,7 +1153,7 @@ private turnOffIllumination(event = null) {
         }
         else {
             // No holiday to show; Lights Off
-            lightsOff();
+            returnLightsToIdle();
         }
     }
 }
@@ -1228,6 +1232,15 @@ private getCurrentOrNextHoliday() {
     else {
         debug("No holidays");
         return null;
+    }
+}
+
+private returnLightsToIdle() {
+    if( duringIlluminationPeriod() && illuminationIdleBehavior == ON) {
+        triggerIllumination();
+    }
+    else {
+        lightsOff();
     }
 }
 
@@ -1472,6 +1485,9 @@ private LocalTime getLocalTime(prefix) {
 @Field static final String SUNRISE = "sunrise";
 @Field static final String SUNSET = "sunset";
 @Field static final String CUSTOM = "custom";
+
+@Field static final String ON = "on";
+@Field static final String OFF = "off";
 
 // Can't be constants because they reference other fields, but effectively constants.
 private Map GetHolidayByID(int id) {
