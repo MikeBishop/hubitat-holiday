@@ -557,8 +557,8 @@ Map illuminationConfig() {
         }
         section("Triggered Configuration") {
             input "illuminationIdleBehavior", "enum", title: "Behavior when not triggered", defaultValue: OFF, options: [
-                OFF: "Off unless holiday active",
-                ON: "On unless holiday active"
+                (OFF): "Off unless holiday active",
+                (ON): "On unless holiday active"
             ]
             selectStartStopTimes("illumination", "Allow triggers");
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
