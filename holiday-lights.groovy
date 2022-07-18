@@ -569,8 +569,8 @@ Map illuminationConfig() {
         if( areLightsCT.any{ a -> a }) {
             // Some lights support CT, so we can show the CT section.
             section("Config for CT lights") {
-                input "colorTemperature", "number", title: "Color temperature", width: 6
-                input "level", "number", title: "Brightness", width: 6, range: "0..100"
+                input "colorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
+                input "level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
             }
         }
         if( areLightsCT.any{ a -> !a }) {
