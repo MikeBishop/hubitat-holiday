@@ -1061,9 +1061,10 @@ private beginIlluminationPeriod(event = null) {
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
     subscribe(lockTriggers, "lock.unlocked", "triggerIllumination");
     if( illuminationSwitch?.currentValue("switch") == "on" ||
-        anyIlluminationTriggers()
+        anyIlluminationTriggers() ||
+        (illuminationIdleBehavior == ON && !duringHolidayPeriod())
     ) {
-        debug("Sensor trigger is active");
+        debug("Turning lights on for illumination");
         triggerIllumination();
     }
 }
@@ -1120,7 +1121,7 @@ private triggerIllumination(event = null) {
 private checkIlluminationOff(event = null) {
     debug("Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : ""));
     if( !anyIlluminationTriggers() ) {
-            debug("No sensor activity detected, turning off illumination in ${duration} minutes");
+            debug("No sensor activity detected, returning to idle in ${duration} minutes");
             unsubscribe(motionTriggers, "motion.inactive");
             unsubscribe(contactTriggers, "contact.closed");
             unsubscribe(lockTriggers, "lock.locked");
