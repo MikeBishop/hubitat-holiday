@@ -28,6 +28,7 @@ preferences {
 }
 
 Map mainPage() {
+    debug("Rendering mainPage");
     dynamicPage(name: "mainPage", title: "Holiday Lighting", install: true, uninstall: true) {
         initialize();
         section("Options") {
@@ -72,10 +73,12 @@ Map mainPage() {
             input "debugSpew", "bool", title: "Log debug messages?",
                 submitOnChange: true, defaultValue: false;
         }
+        debug("Finished with mainPage");
     }
 }
 
 Map deviceSelection() {
+    debug("Rendering deviceSelection");
     dynamicPage(name: "deviceSelection", title: "Devices to Use") {
         section("Devices for Holiday Display") {
             def key;
@@ -112,10 +115,12 @@ Map deviceSelection() {
                     multiple: false, submitOnChange: true
             }
         }
+        debug("Finished with deviceSelection");
     }
 }
 
 Map holidayDefinitions() {
+    debug("Rendering holidayDefinitions");
     dynamicPage(name: "holidayDefinitions", title: "Configure Holiday Displays") {
         sortHolidays()
         if( !state.colorIndices ) {
@@ -130,7 +135,6 @@ Map holidayDefinitions() {
                 title: "Other switches to turn on when holiday lights are active"
         }
 
-        debug("Indices are ${state.holidayIndices.inspect()}")
         debug("Colors are ${state.colorIndices.inspect()}")
         state.holidayIndices?.each { int i ->
             def title = "${settings["holiday${i}Name"]}"
@@ -138,7 +142,6 @@ Map holidayDefinitions() {
                 // List colors here!
                 def colorDescription = "No colors yet. Add some!"
                 def colorsForThisHoliday = state.colorIndices["${i}"];
-                debug("Colors for ${i} are ${colorsForThisHoliday}")
                 if( colorsForThisHoliday?.size() && colorsForThisHoliday.every {
                     settings["holiday${i}Color${it}"] != null
                 } ) {
@@ -196,11 +199,12 @@ Map holidayDefinitions() {
                 )
             }
         }
-        debug("Finished page")
+        debug("Finished with holidayDefinitions");
     }
 }
 
 Map pageImport() {
+    debug("Rendering pageImport");
     dynamicPage(name: "pageImport", title: "Holiday Import progress") {
         def alreadyImported = state.imported ?: [:];
         importSelected.each {
@@ -272,10 +276,12 @@ Map pageImport() {
             state.imported = alreadyImported;
         }
         app.clearSetting("importSelected")
+        debug("Finished with pageImport");
     }
 }
 
 def pageEditHoliday(params) {
+    debug("Rendering pageEditHoliday");
     Integer i
     if( params.holidayIndex != null ) {
         i = params.holidayIndex
@@ -340,10 +346,12 @@ def pageEditHoliday(params) {
                 input "holiday${i}${date}Offset", "number", title: "Offset (optional)", range:"-60..60"
             }
         }
+        debug("Finished with pageEditHoliday");
     }
 }
 
 def pageColorSelect(params) {
+    debug("Rendering pageColorSelect");
     int i;
     if( params?.holidayIndex != null ) {
         i = params.holidayIndex
@@ -401,6 +409,7 @@ def pageColorSelect(params) {
             input "testHoliday${i}", "button", title: "Test Holiday", submitOnChange: true
             input "addColorToHoliday${i}", "button", title: "Add Color", submitOnChange: true
         }
+        debug("Finished with pageColorSelect");
     }
 }
 
@@ -540,6 +549,7 @@ ${colorOptions}
 }
 
 Map illuminationConfig() {
+    debug("Rendering illuminationConfig");
     dynamicPage(name: "illuminationConfig", title: "Illumination Configuration") {
         section("Switch Configuration") {
             input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
@@ -570,26 +580,25 @@ Map illuminationConfig() {
                 paragraph PICKER_JS, width:1;
             }
         }
+        debug("Finished with illuminationConfig");
     }
 }
 
 private selectStartStopTimes(prefix, description) {
-            input "${prefix}StartTime", "enum", title: "${description} from...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            input "${prefix}StopTime", "enum", title: "${description} until...",
-                width: 6, options: TIME_OPTIONS, submitOnChange: true
-            if( settings["${prefix}StartTime"] == CUSTOM ) {
-                input "${prefix}StartTimeCustom", "time", title: "Specify start time:", width: 6
-            }
-            else {
-                input "${prefix}StartTimeOffset", "number", title: "Start time offset in minutes:", width: 6, range: "-240:240"
-            }
-            if( settings["${prefix}StopTime"] == CUSTOM ) {
-                input "${prefix}StopTimeCustom", "time", title: "Specify stop time:", width: 6
-            }
-            else {
-                input "${prefix}StopTimeOffset", "number", title: "Stop time offset in minutes:", width: 6, range: "-240:240"
-            }
+    input "${prefix}StartTime", "enum", title: "${description} from...",
+        width: 6, options: TIME_OPTIONS, submitOnChange: true
+    input "${prefix}StopTime", "enum", title: "${description} until...",
+        width: 6, options: TIME_OPTIONS, submitOnChange: true
+    ["Start", "Stop"].each {
+        if( settings["${prefix}${it}Time"] == CUSTOM ) {
+            input "${prefix}${it}TimeCustom", "time", title: "Specify ${it.toLowerCase()} time:", width: 6
+        }
+        else if (settings["${prefix}${it}Time"]) {
+            input "${prefix}${it}TimeOffset", "number", title: "Start ${it.toLowerCase()} offset in minutes:", width: 6, range: "-240:240"
+        }
+    }
+    input "${prefix}Modes", "enum", title: "${description} during the following modes, regardless of time...",
+        width: 6, options: location.getModes()*.toString(), multiple: true
 }
 
 private holidayIsValid(int i) {
@@ -660,7 +669,9 @@ private sortHolidays() {
     def thisYear = LocalDate.now().getYear()
     def originalList = state.holidayIndices
     debug("Sorting holidays: ${originalList.inspect()}....")
-    def sortedList = originalList.collect{
+    def invalid = originalList.findAll{!holidayIsValid(it)};
+    invalid.each{ log.warn "Invalid holiday ${it}"; DeleteHoliday(it); }
+    def sortedList = originalList.minus(invalid).collect{
             [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
         }.sort{ a,b ->
             a[2] <=> b[2] ?: a[1] <=> b[1]
@@ -670,6 +681,7 @@ private sortHolidays() {
 }
 
 void appButtonHandler(btn) {
+    debug("Button ${btn} pressed");
     if( btn.startsWith("deleteHoliday") ) {
         // Extract index
         def parts = btn.minus("deleteHoliday").split("Color")
@@ -692,6 +704,7 @@ void appButtonHandler(btn) {
 }
 
 private AddColorToHoliday(int holidayIndex) {
+    debug("Adding color to holiday ${holidayIndex}");
     if( !state.nextColorIndices ) {
         state.nextColorIndices = [:];
     }
@@ -699,7 +712,6 @@ private AddColorToHoliday(int holidayIndex) {
     def nextColor = state.nextColorIndices["${holidayIndex}"] ?: 0;
     def indicesForHoliday = state.colorIndices["${holidayIndex}"];
 
-    debug("indicesForHoliday is ${indicesForHoliday.inspect()}")
     if( indicesForHoliday ) {
         indicesForHoliday.add(nextColor);
         state.colorIndices["${holidayIndex}"] = indicesForHoliday;
@@ -713,7 +725,8 @@ private AddColorToHoliday(int holidayIndex) {
 }
 
 private DeleteHoliday(int index) {
-    debug("Deleting ${index}");
+    debug("Deleting holiday ${index}");
+    state.holidayIndices.removeElement(index);
     settings.keySet().findAll{
         it.startsWith("holiday${index}") &&
         !(it.minus("holiday${index}")[0] as char).isDigit()
@@ -721,28 +734,30 @@ private DeleteHoliday(int index) {
         debug("Removing setting ${it}")
         app.removeSetting(it);
     }
-    state.holidayIndices.removeElement(index);
     state.colorIndices.remove("${index}");
     state.imported.remove("${index}");
 }
 
 private DeleteColor(int holidayIndex, int colorIndex) {
-    app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
+    debug("Deleting color ${colorIndex} from holiday ${holidayIndex}");
     state.colorIndices["${holidayIndex}"].removeElement(colorIndex);
+    app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
 }
 
 private StringifyDate(int index) {
     def dates = ["End"];
+    if( !holidayIsValid(index) ) {
+        return "Invalid date";
+    }
+
     if( settings["holiday${index}Span"] ) {
         dates.add(0, "Start");
     }
-    debug("Dates are ${dates}")
     dates.collect {
         try {
             def result = ""
             if( settings["holiday${index}${it}Type"] != SPECIAL ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
-                debug("Value of settings[\"holiday${index}${it}Month\"]} is ${settings["holiday${index}${it}Month"]}")
                 def monthEnum = unarray(settings["holiday${index}${it}Month"]);
                 def month = Month.valueOf(monthEnum);
                 def monthString = LocalDate.now().with(month).format(formatter);
@@ -758,7 +773,6 @@ private StringifyDate(int index) {
 
                 if( settings["holiday${index}${it}Type"] == ORDINAL ) {
                     def ordinal = unarray(settings["holiday${index}${it}Ordinal"]);
-                    debug("Ordinal is ${ordinal} -> ${ORDINALS[ordinal]}")
                     result += "${ORDINALS[ordinal]} ";
                     def formatter = DateTimeFormatter.ofPattern("EEEE");
                     def dayEnum = unarray(settings["holiday${index}${it}Weekday"]);
@@ -819,7 +833,11 @@ void debug(String msg) {
 }
 
 void error(Exception ex) {
-    log.error "${ex} at ${ex.getStackTrace()}"
+    error("${ex} at ${ex.getStackTrace()}");
+}
+
+void error(String msg) {
+    log.error(msg);
 }
 
 // #region Event Handlers
@@ -850,7 +868,12 @@ void beginStateMachine() {
     subscribe(location, "sunriseTime", "scheduleSunriseAndSunset");
     subscribe(location, "sunsetTime", "scheduleSunriseAndSunset");
 
-    // Handle that immediately.
+    // Listen for mode changes.
+    if( illuminationModes || holidayModes ) {
+        subscribe(location, "mode", "onModeChange");
+    }
+
+    // If illumination mode is active, should it be?
     if( state.illuminationMode ) {
         debug("Illumination mode is on when starting");
         checkIlluminationOff();
@@ -874,14 +897,26 @@ private testHoliday(index) {
     runIn(60, "beginStateMachine");
 }
 
+private onModeChange(evt) {
+    debug("Mode changed to ${location.getMode().toString()}");
+    if( duringIlluminationPeriod() ) {
+        beginIlluminationPeriod();
+    }
+    else {
+        // End Illumination will check for active holiday; no need to
+        // handle that case explicitly.
+        endIlluminationPeriod();
+    }
+}
+
 private beginHolidayPeriod() {
     debug("Begin holiday period");
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
         def dates = getHolidayDates(currentHoliday);
-        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart"));
-        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop"));
+        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
+        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
         def now = LocalDateTime.now();
 
         if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
@@ -945,19 +980,21 @@ private doLightUpdate() {
 
         // Apply the colors to the devices.
         debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
-        [devices, colors].transpose().each {
-            def device = it[0];
-            def color = it[1];
-            debug("Setting ${device} to ${color}");
-            if( color ) {
-                device*.setColor(color);
+        if( devices && colors ) {
+            [devices, colors].transpose().each {
+                def device = it[0];
+                def color = it[1];
+                debug("Setting ${device} to ${color}");
+                if( color ) {
+                    device*.setColor(color);
+                }
             }
         }
     }
 }
 
 private endHolidayPeriod() {
-    debug("End holiday period");
+    debug("Not in holiday period");
     state.currentHoliday = null;
     unschedule("doLightUpdate");
     lightsOff();
@@ -966,7 +1003,13 @@ private endHolidayPeriod() {
 private getColorsForHoliday(index, desiredLength) {
     def colors = state.colorIndices["${index}"].collect{
         try {
-            evaluate(settings["holiday${index}Color${it}"])
+            def mapText = settings["holiday${index}Color${it}"];
+            if( mapText ) {
+                evaluate(mapText)
+            }
+            else {
+                null
+            }
         }
         catch(Exception ex) {
             error(ex);
@@ -1007,29 +1050,37 @@ private getColorsForHoliday(index, desiredLength) {
     return subList;
 }
 
-private beginIlluminationPeriod() {
-    debug("Begin illumination period");
+private beginIlluminationPeriod(event = null) {
+    debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
     subscribe(lockTriggers, "lock.unlocked", "triggerIllumination");
-    if( anyIlluminationTriggers() ) {
-            debug("Sensor trigger is active when illumination period begins");
-            triggerIllumination();
+    if( illuminationSwitch?.currentValue("switch") == "on" ||
+        anyIlluminationTriggers()
+    ) {
+        debug("Sensor trigger is active");
+        triggerIllumination();
     }
 }
 
 private anyIlluminationTriggers() {
-    return
-        illuminationSwitch?.currentValue("switch") == "on" ||
-        motionTriggers.any {it.currentValue("motion") == "active"} ||
-        contactTriggers.any {it.currentValue("contact") == "open"} ||
-        lockTriggers.any {it.currentValue("lock").startsWith("unlocked")};
+    def motion = motionTriggers.any { it.currentValue("motion") == "active" };
+    def contact = contactTriggers.any { it.currentValue("contact") == "open" };
+    def lock = lockTriggers.any { it.currentValue("lock").startsWith("unlocked") };
+
+    debug "Motion: ${motion}, ${motionTriggers ? motionTriggers*.currentValue("motion") : "none"}";
+    debug "Contact: ${contact}, ${contactTriggers ? contactTriggers*.currentValue("contact") : "none"}";
+    debug "Lock: ${lock}, ${lockTriggers ? lockTriggers*.currentValue("lock") : "none"}";
+
+    return motion || contact || lock;
 }
 
 private endIlluminationPeriod() {
-    debug("End illumination period");
-    turnOffIllumination();
+    if( !duringIlluminationPeriod() ) {
+        debug("End illumination period");
+        turnOffIllumination();
+    }
 }
 
 private triggerIllumination(event = null) {
@@ -1060,9 +1111,6 @@ private triggerIllumination(event = null) {
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unschedule("doLightUpdate");
-
-    //checkIlluminationOff();
-    // Try not checking this, so the switch keeps lights on.
 }
 
 private checkIlluminationOff(event = null) {
@@ -1087,22 +1135,28 @@ private turnOffIllumination(event = null) {
         unsubscribe(lockTriggers);
     }
 
-    def currentOrNext = getCurrentOrNextHoliday();
-    def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : null;
-    if( !duringHolidayPeriod() || holidayDates == null ||
-            !dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) ) {
+    if( !duringHolidayPeriod() ) {
         // Lights Off
-        lightsOff();
+        endHolidayPeriod();
     }
     else {
-        // Lights On
-        beginHolidayPeriod();
+        def currentOrNext = getCurrentOrNextHoliday();
+        def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : [];
+        if ( holidayDates && dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) )
+        {
+            // Lights On
+            beginHolidayPeriod();
+        }
+        else {
+            // No holiday to show; Lights Off
+            lightsOff();
+        }
     }
 }
 
 private dateIsBetweenInclusive(date, start, end) {
-    return (date.isEqual(start) || date.isAfter(start)) &&
-        (date.isBefore(end) || date.isEqual(end));
+    return start && end && (date?.isEqual(start) || date?.isAfter(start)) &&
+        (date?.isBefore(end) || date?.isEqual(end));
 }
 
 private getHolidayDates(index) {
@@ -1112,6 +1166,11 @@ private getHolidayDates(index) {
 
     def startDate = holidayDate(index, "Start", thisYear);
     def endDate = holidayDate(index, "End", thisYear);
+
+    if( !startDate || !endDate ) {
+        // If calculations failed, don't try to do any fixups.
+        return [];
+    }
 
     // If the end date is before the start date, it crosses the year boundary.
     if( endDate.isBefore(startDate) ) {
@@ -1261,22 +1320,6 @@ private getAsTimeString(prefix) {
     return null;
 }
 
-private LocalDateTime getIlluminationStart() {
-    return getLocalTimeToday("illuminationStart");
-}
-
-private LocalDateTime getIlluminationStop() {
-    return getLocalTimeToday("illuminationStop");
-}
-
-private LocalDateTime getHolidayStart() {
-    return getLocalTimeToday("holidayStart");
-}
-
-private LocalDateTime getHolidayStop() {
-    return getLocalTimeToday("holidayStop");
-}
-
 private Boolean duringHolidayPeriod() {
     return duringPeriod("holiday");
 }
@@ -1288,10 +1331,17 @@ private Boolean duringIlluminationPeriod() {
 private Boolean duringPeriod(prefix) {
     def beginTime = getLocalTimeToday("${prefix}Start");
     def endTime = getLocalTimeToday("${prefix}Stop");
+    def activeModes = settings["${prefix}Modes"];
     def reverseResults = false;
 
+    if( activeModes?.contains(location.getMode().toString()) ) {
+        return true;
+    }
+
     if( !beginTime || !endTime ) {
-        log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
+        if( !activeModes ) {
+            log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
+        }
         return false;
     }
 
