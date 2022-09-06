@@ -538,7 +538,7 @@ document.getElementById("${inputId}").addEventListener("change", function () {
 
     // Then the preset options
     paragraph """
-<select name="${presetKey}" onChange="
+<select onChange="
     debugger;
     let mapElement = document.getElementById('${inputId}');
     mapElement.value = this.value;
