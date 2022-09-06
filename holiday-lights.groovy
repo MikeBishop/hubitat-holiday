@@ -569,8 +569,8 @@ Map illuminationConfig() {
         if( areLightsCT.any{ a -> a }) {
             // Some lights support CT, so we can show the CT section.
             section("Config for CT lights") {
-                input "colorTemperature", "number", title: "Color temperature", width: 6
-                input "level", "number", title: "Brightness", width: 6, range: "0..100"
+                input "colorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
+                input "level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
             }
         }
         if( areLightsCT.any{ a -> !a }) {
@@ -1093,15 +1093,31 @@ private triggerIllumination(event = null) {
     def rgbOnlyDevices = devices.minus(ctDevices);
     debug("RGB devices: ${rgbOnlyDevices.inspect()}");
 
-    ctDevices*.setColorTemperature(colorTemperature, level, null);
+    if( ctDevices ) {
+        if( colorTemperature == null ) {
+            warn("No color temperature set for illumination; defaulting to 2700");
+        }
+        if( level == null ) {
+            warn("No level set for illumination; defaulting to 100");
+        }
+        ctDevices*.setColorTemperature(colorTemperature ?: 2700, level ?: 100, null);
+    }
     if( rgbOnlyDevices) {
-        try {
-            def colorMap = evaluate(illuminationColor);
-            rgbOnlyDevices*.setColor(colorMap);
+        def colorMap;
+
+        if( illuminationColor != null ) {
+            try {
+                    colorMap = evaluate(illuminationColor);
+            }
+            catch(Exception ex) {
+                error(ex);
+            }
         }
-        catch(Exception ex) {
-            error(ex);
+
+        if( colorMap == null ) {
+            warn("No color set for illumination; defaulting to white");
         }
+        rgbOnlyDevices*.setColor(colorMap ?: COLORS["White"]);
     }
     otherIlluminationSwitches*.on();
 
