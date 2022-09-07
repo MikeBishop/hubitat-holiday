@@ -25,6 +25,23 @@ def installed() {
     initialize()
 }
 
+def uninstalled() {
+    log.info "Uninstalled"
+    def childIds = childApps*.getId();
+    childIds.each { deleteChildApp(it) }
+    def switchGroup = getChildDevices().find();
+    if (switchGroup) {
+        switchGroup.removeExcess([]);
+        deleteChildDevice(switchGroup.getDeviceNetworkId());
+    }
+}
+
+def removeChild(childId) {
+    log.debug "Removing child ${childId}"
+    def currentIds = childApps*.getId().collect{ "${it}" }
+    def newIds = currentIds.findAll{ it != childId }
+    getParentSwitch().removeExcess(newIds);
+}
 
 def updated() {
     log.info "Updated with settings: ${settings}"
@@ -38,7 +55,20 @@ def initialize() {
     childApps.each { child ->
     	log.info "Child app: ${child.label}"
     }
+    getParentSwitch().removeExcess(childApps*.getId().collect{ "${it}" })
     state.deviceIndices = state.deviceIndices ?: [];
+    state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
+}
+
+def getParentSwitch() {
+    // Should only be one
+    def switchGroup = getChildDevices().find();
+    if (switchGroup == null) {
+        log.info "No parent switch found; creating"
+        def name = thisName ? "${thisName} Palettes" : "Palettes"
+        switchGroup = addChildDevice("evequefou", "Single Active Switch", "${app.id}-switches", [name: name, isComponent: true]);
+    }
+    return switchGroup;
 }
 
 
@@ -48,9 +78,12 @@ def getFormat(type, myText=""){
 	if(type == "title") return "<h2 style='color:#1A77C9;font-weight: bold'>${myText}</h2>"
 }
 
+def getRgbDevices() {
+    return state.deviceIndices.collect{ settings["device${it}"] };
+}
 
 def mainPage() {
-    dynamicPage(name: "mainPage") {
+    dynamicPage(name: "mainPage", install: true, uninstall: true) {
         def appInstalled = app.getInstallationState();
 
         if (appInstalled != 'COMPLETE') {
@@ -59,7 +92,10 @@ def mainPage() {
         else {
 			section() {
                 input "thisName", "text", title: "Name this instance", submitOnChange: true
-                if(thisName) app.updateLabel("$thisName")
+                if(thisName) {
+                    app.updateLabel("$thisName")
+                    getParentSwitch().setLabel("$thisName Palettes")
+                }
 
 				paragraph "Select a collection of RGB devices to control. Each child instance will apply a different collection of colors to the selected devices."
 

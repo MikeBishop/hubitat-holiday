@@ -27,6 +27,10 @@ def installed() {
     initialize()
 }
 
+def uninstalled() {
+    // Parent needs to notice we're gone
+    parent.removeChild("${app.id}")
+}
 
 def updated() {
     log.info "Updated with settings: ${settings}"
@@ -34,18 +38,24 @@ def updated() {
     initialize()
 }
 
-
 def initialize() {
+    def activator = getControlSwitch();
+    if (activator != null) {
+        log.debug "Activator: ${activator.label}"
+        unsubscribe(activator, "switch.on")
+        subscribe(activator, "switch.on", "activatePalette");
+    }
 }
 
 def pageColorSelect() {
     def name = settings["paletteName"] ?: "New Palette";
-    dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
+    dynamicPage(name: "pageColorSelect", title: "Colors for ${name}", install: true, uninstall: true) {
 
         section("Display Options") {
             input "paletteName", "text", title: "Palette Name", required: true, submitOnChange: true
             if( paletteName ) {
                 app.updateLabel(paletteName);
+                getControlSwitch().setLabel("${paletteName} Activator");
             }
             input "alignment", "bool", title: "Different colors on different lights?",
                 width: 5, submitOnChange: true, defaultValue: true
@@ -58,6 +68,17 @@ def pageColorSelect() {
             if( !settings["alignment"] && settings["rotation"] == STATIC) {
                 paragraph "Note: With this combination, only the first color will ever be used!"
             }
+            input "frequency", "enum", title: "Update Frequency",
+                options: [
+                    1: "1 minute",
+                    5: "5 minutes",
+                    10: "10 minutes",
+                    15: "15 minutes",
+				    30: "30 minutes",
+				    60: "1 hour",
+				    180: "3 hours"
+                ], required: true
+
             paragraph PICKER_JS, width: 1
         }
 
@@ -129,6 +150,11 @@ private DeleteColor(int colorIndex) {
     debug("Deleting color ${colorIndex}");
     state.colorIndices.removeElement(colorIndex);
     app.removeSetting("color${colorIndex}")
+}
+
+private getControlSwitch() {
+    def switchGroup = parent.getParentSwitch();
+    return switchGroup.fetchChild("${app.id}");
 }
 
 @Field final static String PICKER_JS = '''
@@ -266,6 +292,125 @@ ${colorOptions}
     """,width: 4
 }
 
+
+void activatePalette(evt) {
+    log.debug "Activating palette ${paletteName}: ${alignment ? "different" : "same"} colors, ${rotation} pattern";
+    subscribe(getControlSwitch(), "switch.off", "deactivatePalette");
+
+    // We're going to start the display; unless it's static,
+    // schedule the updates.
+    def handlerName = "doLightUpdate";
+    unschedule(handlerName);
+    if( frequency && rotation != STATIC ) {
+        debug("Scheduling ${handlerName} every ${frequency} minutes");
+        switch(Integer.parseInt(frequency)) {
+            case 1:
+                runEvery1Minute(handlerName);
+                break;
+            case 5:
+                runEvery5Minutes(handlerName);
+                break;
+            case 10:
+                runEvery10Minutes(handlerName);
+                break;
+            case 15:
+                runEvery15Minutes(handlerName);
+                break;
+            case 30:
+                runEvery30Minutes(handlerName);
+                break;
+            case 60:
+                runEvery1Hour(handlerName);
+                break;
+            case 180:
+                runEvery3Hours(handlerName);
+                break;
+            default:
+                log.error "Invalid frequency: ${frequency.inspect()}";
+        }
+    }
+    doLightUpdate();
+}
+
+private doLightUpdate() {
+    debug("Do light update");
+
+    // Assemble the list of devices to use.
+    def devices = parent.getRgbDevices();
+    if( alignment ) {
+        // Multiple colors displayed simultaneously.
+        devices = devices.collect{ [it] };
+    }
+    else {
+        // Single color displayed at a time.
+        devices = [devices];
+    }
+
+    // Assemble the list of colors to apply.
+    def colors = getColors(devices.size());
+
+    // Apply the colors to the devices.
+    debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
+    [devices, colors].transpose().each {
+        def device = it[0];
+        def color = it[1];
+        debug("Setting ${device} to ${color}");
+        if( color ) {
+            device*.setColor(color);
+        }
+    }
+}
+
+private getColors(desiredLength) {
+    def colors = state.colorIndices.collect{
+        try {
+            evaluate(settings["color${it}"])
+        }
+        catch(Exception ex) {
+            error(ex);
+            null
+        }
+    };
+    debug("Colors are ${colors.inspect()}");
+    colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
+
+    if( colors.size() <= 0 ) {
+        error("No colors found");
+        return null;
+    }
+
+    def mode = rotation;
+    def additional = 0;
+    if( mode == SEQUENTIAL ) {
+        additional = colors.size();
+    }
+
+    def result = [];
+    // If we don't have enough colors, we'll need to repeat the colors.
+    while( result.size() < desiredLength + additional ) result += colors;
+
+    if( mode == RANDOM ) {
+        Collections.shuffle(result);
+    }
+
+    debug("Colors selected: ${result.inspect()}");
+    def offset = 0;
+    if( mode == SEQUENTIAL ) {
+        offset = state.sequentialIndex ?: 0;
+        state.sequentialIndex = (offset + 1) % (additional ?: 1);
+        debug("Starting from offset ${offset} (next is ${state.sequentialIndex})");
+    }
+    def subList = result[offset..<(offset + desiredLength)];
+    debug("Sublist: ${subList.inspect()}");
+    return subList;
+}
+
+void deactivatePalette(evt) {
+    log.debug "Deactivating palette ${paletteName}"
+    unschedule("doLightUpdate");
+    unsubscribe(getControlSwitch(), "switch.off");
+    parent.getRgbDevices()*.off();
+}
 
 void debug(String msg) {
     if( getParent().debugSpew() ) {
