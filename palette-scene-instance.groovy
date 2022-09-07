@@ -455,28 +455,3 @@ void error(String msg) {
 @Field static final String SEQUENTIAL = "sequential";
 
 @Field static final String trashIcon = "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/images/trash40.png"
-
-private HSVtoRGB(Map hsv) {
-    float r, g, b, i, f, p, q, t;
-    float s = ( hsv?.saturation ?: 0 ) / 100;
-    float v = ( hsv?.level ?: 0 ) / 100;
-    float h = ( hsv?.hue ?: 0 ) / 100;
-    i = Math.floor(h * 6);
-    f = h * 6 - i;
-    p = v * (1 - s);
-    q = v * (1 - f * s);
-    t = v * (1 - (1 - f) * s);
-    switch (i % 6) {
-        case 0: r = v; g = t; b = p; break;
-        case 1: r = q; g = v; b = p; break;
-        case 2: r = p; g = v; b = t; break;
-        case 3: r = p; g = q; b = v; break;
-        case 4: r = t; g = p; b = v; break;
-        case 5: r = v; g = p; b = q; break;
-    }
-    return "#" +
-        [ r, g, b ].collect{
-            def num = (int) Math.round(it * 255);
-            String.format("%02x", num)
-        }.join();
-}
