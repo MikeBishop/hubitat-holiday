@@ -87,16 +87,21 @@ Map deviceSelection() {
             def deviceIndices = state.deviceIndices.clone();
             for( def index in deviceIndices ) {
                 key = "device${index}";
+                groupKey = "device${index}Group";
                 debug("settings[${key}] is ${settings[key]}")
                 if( settings[key] == null ) {
                     // User unselected this device -- drop the index
                     state.deviceIndices.removeElement(index);
                     app.removeSetting(key);
+                    app.removeSetting(groupKey);
                 }
                 else {
                     displayIndex += 1;
                     input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                        multiple: false, submitOnChange: true
+                        multiple: false, submitOnChange: true, width: 6
+                    input groupKey, "enum", title: "Group", width: 6,
+                        options: state.deviceGroups.collectEntries { [it, settings["groupName${it}"]] },
+                        defaultValue: state.deviceGroups[0], required: true, submitOnChange: true
                 }
             }
             def index = state.nextDeviceIndex;
@@ -114,6 +119,25 @@ Map deviceSelection() {
                 input key, "capability.colorControl", title: "RGB light ${displayIndex}",
                     multiple: false, submitOnChange: true
             }
+        }
+        section("Device Groups") {
+            def groupIndex = 0;
+            def multiGroups = state.deviceGroups.size() > 1;
+            for( def group in state.deviceGroups ) {
+                groupIndex += 1;
+                def key = "groupName${group}";
+                input key, "text", title: "Group ${groupIndex} Name", defaultValue: "New Group",
+                    width: 4, submitOnChange: true
+                debug(state.deviceIndices.collect{ [it, settings["device${it}Group"]] }.inspect())
+                debug("Looking for ${group.inspect()}")
+                paragraph state.deviceIndices.findAll { settings["device${it}Group"] == group }.size() +
+                    " devices in group", width: 4
+                if( multiGroups ) {
+                    input "deleteGroup${group}", "button",
+                        title: "Remove Group", width: 4
+                }
+            }
+            input "addGroup", "button", title: "Add Group"
         }
         debug("Finished with deviceSelection");
     }
@@ -701,6 +725,15 @@ void appButtonHandler(btn) {
         def holidayIndex = Integer.parseInt(btn.minus("testHoliday"));
         testHoliday(holidayIndex);
     }
+    else if (btn.startsWith("addGroup")) {
+        AddDeviceGroup();
+    }
+    else if (btn.startsWith("deleteGroup")) {
+        DeleteDeviceGroup(btn.minus("deleteGroup"));
+    }
+    else {
+        log.warn "Unknown button ${btn} pressed";
+    }
 }
 
 private AddColorToHoliday(int holidayIndex) {
@@ -742,6 +775,26 @@ private DeleteColor(int holidayIndex, int colorIndex) {
     debug("Deleting color ${colorIndex} from holiday ${holidayIndex}");
     state.colorIndices["${holidayIndex}"].removeElement(colorIndex);
     app.removeSetting("holiday${holidayIndex}Color${colorIndex}")
+}
+
+private AddDeviceGroup() {
+    debug("Adding device group");
+    if( !state.nextDeviceGroup ) {
+        state.nextDeviceGroup = 0;
+    }
+    def nextGroup = state.nextDeviceGroup;
+    state.deviceGroups.add("${nextGroup}");
+    settings["groupName${nextGroup}"] = "New Group";
+    state.nextDeviceGroup = nextGroup + 1;
+}
+
+private DeleteDeviceGroup(String index) {
+    debug("Deleting device group ${index}");
+    state.deviceGroups.removeElement(index);
+    state.deviceIndices.findAll{ settings["device${it}Group"] == index }.each{
+        settings["device${it}Group"] = state.deviceGroups[0];
+    }
+    app.removeSetting("groupName${index}");
 }
 
 private StringifyDate(int index) {
@@ -816,13 +869,12 @@ void installed() {
 }
 
 void initialize() {
-    if( state.deviceIndices instanceof Boolean ) {
-        state.deviceIndices = []
-    }
     state.nextHolidayIndex = state.nextHolidayIndex ?: 0;
     state.holidayIndices = state.holidayIndices ?: [];
     state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
     state.deviceIndices = state.deviceIndices ?: [];
+    state.deviceGroups = state.deviceGroups ?: ["0"];
+    state.nextDeviceGroup = state.nextDeviceGroup ?: 1;
     debug("Initialize.... ${state.nextHolidayIndex.inspect()} and ${state.holidayIndices.inspect()}")
 }
 
