@@ -54,6 +54,7 @@ def initialize() {
     log.info "There are ${childApps.size()} child apps"
     childApps.each { child ->
     	log.info "Child app: ${child.label}"
+        child.initialize();
     }
     getParentSwitch().removeExcess(childApps*.getId().collect{ "${it}" })
     state.deviceIndices = state.deviceIndices ?: [];
@@ -99,39 +100,7 @@ def mainPage() {
 
 				paragraph "Select a collection of RGB devices to control. Each child instance will apply a different collection of colors to the selected devices."
 
-                def key;
-                def displayIndex = 0
-                debug("Device indices are ${state.deviceIndices}")
-                def deviceIndices = state.deviceIndices.clone();
-                for( def index in deviceIndices ) {
-                    key = "device${index}";
-                    debug("settings[${key}] is ${settings[key]}")
-                    if( settings[key] == null ) {
-                        // User unselected this device -- drop the index
-                        state.deviceIndices.removeElement(index);
-                        app.removeSetting(key);
-                    }
-                    else {
-                        displayIndex += 1;
-                        input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                            multiple: false, submitOnChange: true
-                    }
-                }
-                def index = state.nextDeviceIndex;
-                displayIndex += 1;
-                key = "device${index}";
-                input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                    multiple: false, submitOnChange: true
-                if( settings[key] != null ) {
-                    // User selected device in new slot
-                    state.deviceIndices.add(index);
-                    state.nextDeviceIndex += 1;
-                    index = state.nextDeviceIndex;
-                    displayIndex += 1;
-                    key = "device${index}";
-                    input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                        multiple: false, submitOnChange: true
-                }
+                deviceSelector();
                 input "debugSpew", "bool", title: "Log debug messages?",
                     submitOnChange: true, defaultValue: false;
             }
@@ -142,20 +111,8 @@ def mainPage() {
 	}
 }
 
-void debug(String msg) {
-    if( debugSpew ) {
-        log.debug(msg)
-    }
-}
-
 def debugSpew() {
     return debugSpew;
 }
 
-void error(Exception ex) {
-    error("${ex} at ${ex.getStackTrace()}");
-}
-
-void error(String msg) {
-    log.error(msg);
-}
+#include evequefou.color-tools
