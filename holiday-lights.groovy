@@ -734,7 +734,11 @@ private conditionalLightUpdate() {
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
         debug("Do light update");
-        doLightUpdate(state.colorIndices["${currentHoliday}"], "holiday${currentHoliday}")
+        doLightUpdate(
+            state.deviceIndices.collect{ settings["device${it}"] },
+            state.colorIndices["${currentHoliday}"],
+            "holiday${currentHoliday}"
+        )
     }
 }
 

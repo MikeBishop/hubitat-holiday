@@ -119,7 +119,6 @@ private drawColorSection(prefix, color, index) {
 }
 
 private scheduleHandler(handlerName, frequency, recurring = true) {
-    debug("scheduleHandler: ${handlerName}, ${frequency}, ${recurring}")
     unschedule(handlerName);
     if( frequency && recurring ) {
         debug("Scheduling ${handlerName} every ${frequency} minutes");
@@ -153,6 +152,7 @@ private scheduleHandler(handlerName, frequency, recurring = true) {
 }
 
 private getColors(colorIndices, desiredLength, prefix = "") {
+    debug("getColors(${colorIndices}, ${desiredLength}, ${prefix})")
     def colors = colorIndices.collect{
         try {
             evaluate(settings["${prefix}Color${it}"])
@@ -193,9 +193,8 @@ private getColors(colorIndices, desiredLength, prefix = "") {
     return subList;
 }
 
-def doLightUpdate(indices, prefix = "") {
+def doLightUpdate(devices, colorIndices, prefix = "") {
     // Assemble the list of devices to use.
-    def devices = state.deviceIndices.collect{ settings["device${it}"] };
     if( settings[prefix + ALIGNMENT] ) {
         // Multiple colors displayed simultaneously.
         devices = devices.collect{ [it] };
@@ -207,7 +206,7 @@ def doLightUpdate(indices, prefix = "") {
 
     // Assemble the list of colors to apply.
     def colors = getColors(
-        indices,
+        colorIndices,
         devices.size(),
         prefix
     );

@@ -41,14 +41,13 @@ def updated() {
 def initialize() {
     def activator = getControlSwitch();
     if (activator != null) {
-        log.debug "Activator: ${activator.label}"
+        debug("Activator: ${activator.label}")
         subscribe(activator, "switch.on", "activatePalette");
     }
     if( activator.currentValue("switch") == "on" ) {
         unschedule("relayLightUpdate")
         activatePalette()
     }
-    settings["debugSpew"] = getParent().debugSpew();
 }
 
 def pageColorSelect() {
@@ -72,6 +71,9 @@ def pageColorSelect() {
 				    60: "1 hour",
 				    180: "3 hours"
                 ], required: true
+            input "debugSpew", "bool", title: "Log debug messages?",
+                submitOnChange: true, defaultValue: getParent().debugSpew();
+
 
             paragraph PICKER_JS, width: 1
         }
@@ -139,7 +141,7 @@ private getControlSwitch() {
 }
 
 void activatePalette(evt = null) {
-    log.debug "Activating palette ${paletteName}: ${settings[ALIGNMENT] ? "different" : "same"} colors, ${settings[ROTATION]} pattern";
+    debug("Activating palette ${paletteName}: ${settings[ALIGNMENT] ? "different" : "same"} colors, ${settings[ROTATION]} pattern");
     subscribe(getControlSwitch(), "switch.off", "deactivatePalette");
 
     // We're going to start the display; unless it's static,
@@ -149,11 +151,11 @@ void activatePalette(evt = null) {
 
 private relayLightUpdate() {
     debug("Do light update");
-    doLightUpdate(state.colorIndices);
+    doLightUpdate(parent.getRgbDevices(), state.colorIndices);
 }
 
 void deactivatePalette(evt) {
-    log.debug "Deactivating palette ${paletteName}"
+    debug("Deactivating palette ${paletteName}");
     unschedule("relayLightUpdate");
     unsubscribe(getControlSwitch(), "switch.off");
     parent.getRgbDevices()*.off();
