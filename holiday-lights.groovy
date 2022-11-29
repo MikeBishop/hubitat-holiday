@@ -900,7 +900,7 @@ void beginStateMachine() {
     unschedule();
     state.test = false;
     state.currentHoliday = null;
-    state.sequentialIndex = null;
+    state.sequentialIndex = [:];
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
@@ -1016,29 +1016,35 @@ private doLightUpdate() {
     debug("Do light update");
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
-        // Assemble the list of devices to use.
-        def devices = state.deviceIndices.collect{ settings["device${it}"] };
-        if( settings["holiday${currentHoliday}Alignment"] ) {
-            // Multiple colors displayed simultaneously.
-            devices = devices.collect{ [it] };
-        }
-        else {
-            // Single color displayed at a time.
-            devices = [devices];
-        }
+        state.deviceGroups.forEach{ group ->
+            // Assemble the list of devices to use.
+            def devices = state.deviceIndices.findAll{
+                settings["device${it}Group"] == group ||
+                    settings["device${it}Group"] == null
+            }.collect{ settings["device${it}"] };
 
-        // Assemble the list of colors to apply.
-        def colors = getColorsForHoliday(currentHoliday, devices.size());
+            if( settings["holiday${currentHoliday}Alignment"] ) {
+                // Multiple colors displayed simultaneously.
+                devices = devices.collect{ [it] };
+            }
+            else {
+                // Single color displayed at a time.
+                devices = [devices];
+            }
 
-        // Apply the colors to the devices.
-        debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
-        if( devices && colors ) {
-            [devices, colors].transpose().each {
-                def device = it[0];
-                def color = it[1];
-                debug("Setting ${device} to ${color}");
-                if( color ) {
-                    device*.setColor(color);
+            // Assemble the list of colors to apply.
+            def colors = getColorsForHoliday(currentHoliday, devices.size(), group);
+
+            // Apply the colors to the devices.
+            debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
+            if( devices && colors ) {
+                [devices, colors].transpose().each {
+                    def device = it[0];
+                    def color = it[1];
+                    debug("Setting ${device} to ${color}");
+                    if( color ) {
+                        device*.setColor(color);
+                    }
                 }
             }
         }
@@ -1052,7 +1058,7 @@ private endHolidayPeriod() {
     lightsOff();
 }
 
-private getColorsForHoliday(index, desiredLength) {
+private getColorsForHoliday(index, desiredLength, key) {
     def colors = state.colorIndices["${index}"].collect{
         try {
             def mapText = settings["holiday${index}Color${it}"];
@@ -1093,9 +1099,9 @@ private getColorsForHoliday(index, desiredLength) {
     debug("Colors for holiday ${index}: ${result.inspect()}");
     def offset = 0;
     if( mode == SEQUENTIAL ) {
-        offset = state.sequentialIndex ?: 0;
-        state.sequentialIndex = (offset + 1) % (additional ?: 1);
-        debug("Starting from offset ${offset} (next is ${state.sequentialIndex})");
+        offset = state.sequentialIndex[key] ?: 0;
+        state.sequentialIndex[key] = (offset + 1) % (additional ?: 1);
+        debug("Starting from offset ${offset} (next is ${state.sequentialIndex[key]})");
     }
     def subList = result[offset..<(offset + desiredLength)];
     debug("Sublist: ${subList.inspect()}");
