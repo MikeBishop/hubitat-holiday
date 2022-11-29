@@ -42,8 +42,11 @@ def initialize() {
     def activator = getControlSwitch();
     if (activator != null) {
         log.debug "Activator: ${activator.label}"
-        unsubscribe(activator, "switch.on")
         subscribe(activator, "switch.on", "activatePalette");
+    }
+    if( activator.currentValue("switch") == "on" ) {
+        unschedule("relayLightUpdate")
+        activatePalette()
     }
     settings["debugSpew"] = getParent().debugSpew();
 }
@@ -135,42 +138,23 @@ private getControlSwitch() {
     return switchGroup.fetchChild("${app.id}");
 }
 
-
-
-void activatePalette(evt) {
+void activatePalette(evt = null) {
     log.debug "Activating palette ${paletteName}: ${settings[ALIGNMENT] ? "different" : "same"} colors, ${settings[ROTATION]} pattern";
     subscribe(getControlSwitch(), "switch.off", "deactivatePalette");
 
     // We're going to start the display; unless it's static,
     // schedule the updates.
-    def handlerName = "doLightUpdate";
-    scheduleHandler(handlerName, frequency, settings[ROTATION] != STATIC);
+    scheduleHandler("relayLightUpdate", frequency, settings[ROTATION] != STATIC);
 }
 
-private doLightUpdate() {
+private relayLightUpdate() {
     debug("Do light update");
-
-    // Assemble the list of devices to use.
-    def devices = parent.getRgbDevices();
-    if( settings[ALIGNMENT] ) {
-        // Multiple colors displayed simultaneously.
-        devices = devices.collect{ [it] };
-    }
-    else {
-        // Single color displayed at a time.
-        devices = [devices];
-    }
-
-    // Assemble the list of colors to apply.
-    def colors = getColors(state.colorIndices, devices.size());
-
-    // Apply the colors to the devices.
-    applyColors(colors, devices);
+    doLightUpdate(state.colorIndices);
 }
 
 void deactivatePalette(evt) {
     log.debug "Deactivating palette ${paletteName}"
-    unschedule("doLightUpdate");
+    unschedule("relayLightUpdate");
     unsubscribe(getControlSwitch(), "switch.off");
     parent.getRgbDevices()*.off();
 }

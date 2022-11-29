@@ -720,7 +720,7 @@ private beginHolidayPeriod() {
 
             // We're going to start the display; unless it's static,
             // schedule the updates.
-            def handlerName = "doLightUpdate";
+            def handlerName = "conditionalLightUpdate";
             scheduleHandler(handlerName, frequency,
                 settings["holiday${currentHoliday}Display"] != STATIC &&
                     !state.test
@@ -730,30 +730,11 @@ private beginHolidayPeriod() {
     }
 }
 
-private doLightUpdate() {
-    debug("Do light update");
+private conditionalLightUpdate() {
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
-        // Assemble the list of devices to use.
-        def devices = state.deviceIndices.collect{ settings["device${it}"] };
-        if( settings["holiday${currentHoliday}Alignment"] ) {
-            // Multiple colors displayed simultaneously.
-            devices = devices.collect{ [it] };
-        }
-        else {
-            // Single color displayed at a time.
-            devices = [devices];
-        }
-
-        // Assemble the list of colors to apply.
-        def colors = getColors(
-            state.colorIndices["${currentHoliday}"],
-            devices.size(),
-            "holiday${currentHoliday}"
-        );
-
-        // Apply the colors to the devices.
-        applyColors(colors, devices);
+        debug("Do light update");
+        doLightUpdate(state.colorIndices["${currentHoliday}"], "holiday${currentHoliday}")
     }
 }
 
