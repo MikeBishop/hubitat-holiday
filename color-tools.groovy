@@ -85,18 +85,21 @@ private drawPicker(inputKey, pickerSuffix = "") {
 }
 
 private displayOptions(prefix = "") {
-    input "${prefix}Alignment", "bool", title: "Different colors on different lights?",
+    input "${prefix}${ALIGNMENT}", "bool", title: "Different colors on different lights?",
                 width: 5, submitOnChange: true, defaultValue: true
-    input "${prefix}Rotation", "enum", title: "How to rotate colors",
+    input "${prefix}${ROTATION}", "enum", title: "How to rotate colors",
         width: 5, options: [
             (RANDOM): "Random",
             (STATIC):  "Static",
             (SEQUENTIAL): "Sequential"
         ], submitOnChange: true
-    if( !settings["${prefix}Alignment"] && settings["${prefix}Rotation"] == STATIC) {
+    if( !settings["${prefix}${ALIGNMENT}"] && settings["${prefix}${ROTATION}"] == STATIC) {
         paragraph "Note: With this combination, only the first color will ever be used!"
     }
 }
+
+@Field final static String ALIGNMENT = "Alignment"
+@Field final static String ROTATION = "Rotation"
 
 private drawColorSection(prefix, color, index) {
     def inputKey = "${prefix}Color${color}"

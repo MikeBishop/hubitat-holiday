@@ -138,13 +138,13 @@ private getControlSwitch() {
 
 
 void activatePalette(evt) {
-    log.debug "Activating palette ${paletteName}: ${alignment ? "different" : "same"} colors, ${rotation} pattern";
+    log.debug "Activating palette ${paletteName}: ${settings[ALIGNMENT] ? "different" : "same"} colors, ${settings[ROTATION]} pattern";
     subscribe(getControlSwitch(), "switch.off", "deactivatePalette");
 
     // We're going to start the display; unless it's static,
     // schedule the updates.
     def handlerName = "doLightUpdate";
-    scheduleHandler(handlerName, frequency, rotation != STATIC);
+    scheduleHandler(handlerName, frequency, settings[ROTATION] != STATIC);
 }
 
 private doLightUpdate() {
@@ -152,7 +152,7 @@ private doLightUpdate() {
 
     // Assemble the list of devices to use.
     def devices = parent.getRgbDevices();
-    if( alignment ) {
+    if( settings[ALIGNMENT] ) {
         // Multiple colors displayed simultaneously.
         devices = devices.collect{ [it] };
     }
