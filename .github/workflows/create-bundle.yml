@@ -2,7 +2,7 @@ name: Create Hubitat Bundles
 on:
   push:
     branches:
-      - palette-scenes
+      - main
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,14 +32,23 @@ jobs:
         pushd ./palette-release
         zip -r ../palette-scenes.zip .
         popd
+    - name: Check PR or commit
+      uses: haya14busa/action-cond@v1
+      id: change_type
+      with:
+        cond: ${{ github.event_name == 'pull_request' }}
+        if_true: "minor"
+        if_false: "patch"
     - name: Bump version and push tag
       uses: anothrNick/github-tag-action@master
       env:
-        DEFAULT_BUMP: patch
+        RELEASE_BRANCHES: main
+        INITIAL_VERSION: 1.1.0
+        DEFAULT_BUMP: ${{ steps.change_type.outputs.value }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       id: tag
     - uses: ncipollo/release-action@v1
       with:
         artifacts: "*.zip"
         tag: ${{ steps.tag.outputs.new_tag }}
-        commit: palette-scenes
+        commit: ${{ github.sha }}
