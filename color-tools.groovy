@@ -9,7 +9,7 @@ import groovy.transform.Field
 
 // put methods, etc. here
 
-@Field final static String PICKER_JS = '<script type="text/javascript" src="/local/evequefou_color_picker.js"></script>'
+@Field final static String PICKER_JS = '<script type="text/javascript" src="/local/13b8995f-5491-4c12-afed-efb45896e8b9-evequefou_color_picker.js"></script>'
 
 private deviceSelector() {
     def key;
