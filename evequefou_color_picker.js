@@ -1,21 +1,22 @@
 function syncColors(pickerId, inputId) {
+    debugger;
     let colorMap = document.getElementById(inputId);
     let picker = document.getElementById(pickerId);
     let hueStr = '0', satStr = '0', valStr = '0';
-    let colorStr = colorMap.innerText;
+    let colorStr = colorMap.value;
 
     if (colorStr) {
         try {
-            colorStr = colorStr.replace(/(\\w+):/g, '"$1":');
+            colorStr = colorStr.replace(/(\w+):/g, '"$1":');
             colorStr = colorStr.slice(1).slice(0, -1);
             const parsedColor = JSON.parse(`{${colorStr}}`);
             hueStr = `${parsedColor.hue}`;
             satStr = `${parsedColor.saturation}`;
             levStr = `${parsedColor.level}`;
 
-            let hue = parseFloat(hueStr)/100;
-            let sat = parseFloat(satStr)/100;
-            let level = parseFloat(levStr)/100;
+            let hue = parseFloat(hueStr) / 100;
+            let sat = parseFloat(satStr) / 100;
+            let level = parseFloat(levStr) / 100;
 
             let RGB = HSVtoRGB(hue, sat, level);
 
@@ -28,22 +29,14 @@ function syncColors(pickerId, inputId) {
 
     // Otherwise, read the picker and populate the Map input
     let hexString = picker.value;
-    if( hexString.length > 7 ) {
-        hexString = "#" + hexString.slice(2);
-    }
 
     let rgb = {
-        r: parseInt(hex.substring(1, 3), 16),
-        g: parseInt(hex.substring(3, 5), 16),
-        b: parseInt(hex.substring(5, 7), 16)
-    }
+        r: parseInt(hexString.substring(1, 3), 16),
+        g: parseInt(hexString.substring(3, 5), 16),
+        b: parseInt(hexString.substring(5, 7), 16)
+    };
     let hsv = RGBtoHSV(rgb);
-    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.v*100}]`;
-}
-
-function pickerChange(num){
-    document.getElementById().value = "";
-    syncColors("colorPicker" + num, "settings[holiday${i}color" + num + "]")
+    colorMap.value = `[hue:${hsv.h * 100}, saturation:${hsv.s * 100}, level:${hsv.v * 100}]`;
 }
 
 function HSVtoRGB(h, s, v) {
@@ -83,7 +76,7 @@ function RGBtoHSV(r, g, b) {
 
     switch (max) {
         case min: h = 0; break;
-        case r: h = (g - b) + d * (g < b ? 6: 0); h /= 6 * d; break;
+        case r: h = (g - b) + d * (g < b ? 6 : 0); h /= 6 * d; break;
         case g: h = (b - r) + d * 2; h /= 6 * d; break;
         case b: h = (r - g) + d * 4; h /= 6 * d; break;
     }
@@ -92,44 +85,5 @@ function RGBtoHSV(r, g, b) {
         h: h,
         s: s,
         v: v
-    };
-}
-
-function HSVtoHSL(h, s, v) {
-    if (arguments.length === 1) {
-        s = h.s, v = h.v, h = h.h;
-    }
-    var _h = h,
-        _s = s * v,
-        _l = (2 - s) * v;
-    _s /= (_l <= 1) ? _l : 2 - _l;
-    _s = _s ? _s : 0;
-    _l /= 2;
-
-    return {
-        h: _h,
-        s: _s,
-        l: _l
-    };
-}
-
-function HSLtoHSV(h, s, l) {
-    if (arguments.length === 1) {
-        s = h.s, l = h.l, h = h.h;
-    }
-    var _h = h,
-        _s,
-        _v;
-
-    l *= 2;
-    s *= (l <= 1) ? l : 2 - l;
-    _v = (l + s) / 2;
-    _s = (2 * s) / (l + s);
-    _s = _s ? _s : 0;
-
-    return {
-        h: _h,
-        s: _s,
-        v: _v
     };
 }

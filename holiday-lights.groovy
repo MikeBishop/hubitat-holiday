@@ -81,39 +81,7 @@ Map deviceSelection() {
     debug("Rendering deviceSelection");
     dynamicPage(name: "deviceSelection", title: "Devices to Use") {
         section("Devices for Holiday Display") {
-            def key;
-            def displayIndex = 0
-            debug("Device indices are ${state.deviceIndices}")
-            def deviceIndices = state.deviceIndices.clone();
-            for( def index in deviceIndices ) {
-                key = "device${index}";
-                debug("settings[${key}] is ${settings[key]}")
-                if( settings[key] == null ) {
-                    // User unselected this device -- drop the index
-                    state.deviceIndices.removeElement(index);
-                    app.removeSetting(key);
-                }
-                else {
-                    displayIndex += 1;
-                    input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                        multiple: false, submitOnChange: true
-                }
-            }
-            def index = state.nextDeviceIndex;
-            displayIndex += 1;
-            key = "device${index}";
-            input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                multiple: false, submitOnChange: true
-            if( settings[key] != null ) {
-                // User selected device in new slot
-                state.deviceIndices.add(index);
-                state.nextDeviceIndex += 1;
-                index = state.nextDeviceIndex;
-                displayIndex += 1;
-                key = "device${index}";
-                input key, "capability.colorControl", title: "RGB light ${displayIndex}",
-                    multiple: false, submitOnChange: true
-            }
+            deviceSelector();
         }
         debug("Finished with deviceSelection");
     }
@@ -365,17 +333,7 @@ def pageColorSelect(params) {
     def name = settings["holiday${i}Name"] ?: "New Holiday"
     dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
         section("Display Options") {
-            input "holiday${i}Alignment", "bool", title: "Different colors on different lights?",
-                width: 5, submitOnChange: true, defaultValue: true
-            input "holiday${i}Rotation", "enum", title: "How to rotate colors",
-                width: 5, options: [
-                    (RANDOM): "Random",
-                    (STATIC):  "Static",
-                    (SEQUENTIAL): "Sequential"
-                ], submitOnChange: true
-            if( !settings["holiday${i}Alignment"] && settings["holiday${i}Rotation"] == STATIC) {
-                paragraph "Note: With this combination, only the first color will ever be used!"
-            }
+            displayOptions("holiday${i}");
             paragraph PICKER_JS, width: 1
         }
 
@@ -389,20 +347,7 @@ def pageColorSelect(params) {
         debug("colorsForThisHoliday ${colorsForThisHoliday.inspect()}")
 
         colorsForThisHoliday.eachWithIndex { color, index ->
-
-            def inputKey = "holiday${i}Color${color}"
-            debug("Color ${index+1} is ${settings[inputKey]}")
-
-            // For each existing color slot, display four things:
-            section("Color ${index+1}") {
-
-                // Map, picker, and presets displayed here
-                drawPicker(inputKey, color);
-
-                // And finally a delete button.
-                def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; margin: 5px 5px 0 -8px;'>"
-                input "deleteHoliday${i}Color${color}", "button", title: "${delete} Delete", submitOnChange: true, width: 3
-            }
+            drawColorSection("holiday${i}", color, index);
         }
 
         section("") {
@@ -411,141 +356,6 @@ def pageColorSelect(params) {
         }
         debug("Finished with pageColorSelect");
     }
-}
-
-@Field final static String PICKER_JS = '''
-<script type="text/javascript">
-function syncColors(pickerId, inputId) {
-    debugger;
-    let colorMap = document.getElementById(inputId);
-    let picker = document.getElementById(pickerId);
-    let hueStr = '0', satStr = '0', valStr = '0';
-    let colorStr = colorMap.value;
-
-    if (colorStr) {
-        try {
-            colorStr = colorStr.replace(/(\\w+):/g, '"$1":');
-            colorStr = colorStr.slice(1).slice(0, -1);
-            const parsedColor = JSON.parse(`{${colorStr}}`);
-            hueStr = `${parsedColor.hue}`;
-            satStr = `${parsedColor.saturation}`;
-            levStr = `${parsedColor.level}`;
-
-            let hue = parseFloat(hueStr)/100;
-            let sat = parseFloat(satStr)/100;
-            let level = parseFloat(levStr)/100;
-
-            let RGB = HSVtoRGB(hue, sat, level);
-
-            picker.value = "#" + ((1 << 24) + (RGB.r << 16) + (RGB.g << 8) + RGB.b).toString(16).slice(1);
-            return;
-        } catch (e) {
-            // ignore
-        }
-    }
-
-    // Otherwise, read the picker and populate the Map input
-    let hexString = picker.value;
-
-    let rgb = {
-        r: parseInt(hexString.substring(1, 3), 16),
-        g: parseInt(hexString.substring(3, 5), 16),
-        b: parseInt(hexString.substring(5, 7), 16)
-    };
-    let hsv = RGBtoHSV(rgb);
-    colorMap.value = `[hue:${hsv.h*100}, saturation:${hsv.s*100}, level:${hsv.v*100}]`;
-}
-
-function HSVtoRGB(h, s, v) {
-    var r, g, b, i, f, p, q, t;
-    if (arguments.length === 1) {
-        s = h.s, v = h.v, h = h.h;
-    }
-    i = Math.floor(h * 6);
-    f = h * 6 - i;
-    p = v * (1 - s);
-    q = v * (1 - f * s);
-    t = v * (1 - (1 - f) * s);
-    switch (i % 6) {
-        case 0: r = v, g = t, b = p; break;
-        case 1: r = q, g = v, b = p; break;
-        case 2: r = p, g = v, b = t; break;
-        case 3: r = p, g = q, b = v; break;
-        case 4: r = t, g = p, b = v; break;
-        case 5: r = v, g = p, b = q; break;
-    }
-    return {
-        r: Math.round(r * 255),
-        g: Math.round(g * 255),
-        b: Math.round(b * 255)
-    };
-}
-
-function RGBtoHSV(r, g, b) {
-    if (arguments.length === 1) {
-        g = r.g, b = r.b, r = r.r;
-    }
-    var max = Math.max(r, g, b), min = Math.min(r, g, b),
-        d = max - min,
-        h,
-        s = (max === 0 ? 0 : d / max),
-        v = max / 255;
-
-    switch (max) {
-        case min: h = 0; break;
-        case r: h = (g - b) + d * (g < b ? 6: 0); h /= 6 * d; break;
-        case g: h = (b - r) + d * 2; h /= 6 * d; break;
-        case b: h = (r - g) + d * 4; h /= 6 * d; break;
-    }
-
-    return {
-        h: h,
-        s: s,
-        v: v
-    };
-}
-</script>
-''';
-
-private drawPicker(inputKey, pickerSuffix = "") {
-    def inputId = "settings[${inputKey}]";
-    def colorOptions = COLORS.
-        collect{ "<option value=\"${it.value}\">${it.key}</option>" }.
-        join("\n");
-
-    // First, the actual ColorMap input for a literal selection
-    // Everything else transfers its value here.
-    input inputKey, "COLOR_MAP", title: "", required: true, defaultValue: COLORS["White"]
-
-    // Next, inject a color picker (and its scripts) to help with setting
-    // the map:
-    def pickerId = "colorPicker${pickerSuffix}"
-    paragraph """
-<input type="color" id="${pickerId}" style="width: 95%;" onChange="
-    let mapElement = document.getElementById('${inputId}');
-    mapElement.value = '';
-    syncColors('${pickerId}', '${inputId}');
-">
-<script type="text/javascript">
-\$(document).ready(function() {
-syncColors("${pickerId}", "${inputId}");
-document.getElementById("${inputId}").addEventListener("change", function () {
-        syncColors("${pickerId}", "${inputId}");
-    });
-})
-</script>
-                """, width: 5
-
-    // Then the preset options
-    paragraph """
-<select name="${presetKey}" onChange="
-    debugger;
-    let mapElement = document.getElementById('${inputId}');
-    mapElement.value = this.value;
-    syncColors('${pickerId}', '${inputId}');">
-${colorOptions}
-</select>
-    """,width: 4
 }
 
 Map illuminationConfig() {
@@ -826,20 +636,6 @@ void initialize() {
     debug("Initialize.... ${state.nextHolidayIndex.inspect()} and ${state.holidayIndices.inspect()}")
 }
 
-void debug(String msg) {
-    if( debugSpew ) {
-        log.debug(msg)
-    }
-}
-
-void error(Exception ex) {
-    error("${ex} at ${ex.getStackTrace()}");
-}
-
-void error(String msg) {
-    log.error(msg);
-}
-
 // #region Event Handlers
 
 void beginStateMachine() {
@@ -924,72 +720,25 @@ private beginHolidayPeriod() {
 
             // We're going to start the display; unless it's static,
             // schedule the updates.
-            def handlerName = "doLightUpdate";
-            unschedule(handlerName);
-            if( frequency && settings["holiday${currentHoliday}Display"] != STATIC && !state.test ) {
-                debug("Scheduling ${handlerName} every ${frequency} minutes");
-                switch(Integer.parseInt(frequency)) {
-                    case 1:
-                        runEvery1Minute(handlerName);
-                        break;
-                    case 5:
-                        runEvery5Minutes(handlerName);
-                        break;
-                    case 10:
-                        runEvery10Minutes(handlerName);
-                        break;
-                    case 15:
-                        runEvery15Minutes(handlerName);
-                        break;
-                    case 30:
-                        runEvery30Minutes(handlerName);
-                        break;
-                    case 60:
-                        runEvery1Hour(handlerName);
-                        break;
-                    case 180:
-                        runEvery3Hours(handlerName);
-                        break;
-                    default:
-                        log.error "Invalid frequency: ${frequency.inspect()}";
-                }
-            }
-            doLightUpdate();
+            def handlerName = "conditionalLightUpdate";
+            scheduleHandler(handlerName, frequency,
+                settings["holiday${currentHoliday}Display"] != STATIC &&
+                    !state.test
+            );
             switchesForHoliday*.on();
         }
     }
 }
 
-private doLightUpdate() {
-    debug("Do light update");
+private conditionalLightUpdate() {
     def currentHoliday = state.currentHoliday;
     if( currentHoliday != null ) {
-        // Assemble the list of devices to use.
-        def devices = state.deviceIndices.collect{ settings["device${it}"] };
-        if( settings["holiday${currentHoliday}Alignment"] ) {
-            // Multiple colors displayed simultaneously.
-            devices = devices.collect{ [it] };
-        }
-        else {
-            // Single color displayed at a time.
-            devices = [devices];
-        }
-
-        // Assemble the list of colors to apply.
-        def colors = getColorsForHoliday(currentHoliday, devices.size());
-
-        // Apply the colors to the devices.
-        debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
-        if( devices && colors ) {
-            [devices, colors].transpose().each {
-                def device = it[0];
-                def color = it[1];
-                debug("Setting ${device} to ${color}");
-                if( color ) {
-                    device*.setColor(color);
-                }
-            }
-        }
+        debug("Do light update");
+        doLightUpdate(
+            state.deviceIndices.collect{ settings["device${it}"] },
+            state.colorIndices["${currentHoliday}"],
+            "holiday${currentHoliday}"
+        )
     }
 }
 
@@ -998,56 +747,6 @@ private endHolidayPeriod() {
     state.currentHoliday = null;
     unschedule("doLightUpdate");
     lightsOff();
-}
-
-private getColorsForHoliday(index, desiredLength) {
-    def colors = state.colorIndices["${index}"].collect{
-        try {
-            def mapText = settings["holiday${index}Color${it}"];
-            if( mapText ) {
-                evaluate(mapText)
-            }
-            else {
-                null
-            }
-        }
-        catch(Exception ex) {
-            error(ex);
-            null
-        }
-    };
-    debug("Colors for holiday ${index}: ${colors.inspect()}");
-    colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
-
-    if( colors.size() <= 0 ) {
-        error("No colors found for holiday ${index}");
-        return null;
-    }
-
-    def mode = settings["holiday${index}Rotation"];
-    def additional = 0;
-    if( mode == SEQUENTIAL ) {
-        additional = colors.size();
-    }
-
-    def result = [];
-    // If we don't have enough colors, we'll need to repeat the colors.
-    while( result.size() < desiredLength + additional ) result += colors;
-
-    if( mode == RANDOM ) {
-        Collections.shuffle(result);
-    }
-
-    debug("Colors for holiday ${index}: ${result.inspect()}");
-    def offset = 0;
-    if( mode == SEQUENTIAL ) {
-        offset = state.sequentialIndex ?: 0;
-        state.sequentialIndex = (offset + 1) % (additional ?: 1);
-        debug("Starting from offset ${offset} (next is ${state.sequentialIndex})");
-    }
-    def subList = result[offset..<(offset + desiredLength)];
-    debug("Sublist: ${subList.inspect()}");
-    return subList;
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -1431,7 +1130,6 @@ private LocalTime getLocalTime(prefix) {
 // #region Constants
 
 // UI Elements
-@Field static final String trashIcon = "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/images/trash40.png"
 @Field static final Map ORDINALS = [
     "1": "First",
     "2": "Second",
@@ -1453,34 +1151,6 @@ private LocalTime getLocalTime(prefix) {
     "roshHashanah": "Rosh Hashanah",
     // Others to be added later
 ]
-@Field static final Map COLORS = [
-    "Choose a Preset": "",
-    "White": [hue: 0, saturation: 0, level: 100],
-    "Magenta": [hue: 82, saturation: 100, level: 100],
-    "Pink": [hue: 90.78, saturation: 67.84, level: 100],
-    "Raspberry": [hue: 94, saturation: 100, level: 100],
-    "Red": [hue: 0, saturation: 100, level: 100],
-    "Brick Red": [hue: 4, saturation: 100, level: 100],
-    "Safety Orange": [hue: 7, saturation: 100, level: 100],
-    "Orange": [hue: 10, saturation: 100, level: 100],
-    "Amber": [hue: 13, saturation: 100, level: 100],
-    "Yellow": [hue: 16, saturation: 100, level: 100],
-    "Pastel Green": [hue: 23, saturation: 56, level: 100],
-    "Green": [hue: 33, saturation: 100, level: 100],
-    "Turquoise": [hue: 47, saturation: 100, level: 100],
-    "Aqua": [hue: 50, saturation: 100, level: 100],
-    "Sky Blue": [hue: 53, saturation: 91, level: 100],
-    "Navy Blue": [hue: 61, saturation: 100, level: 100],
-    "Blue": [hue: 65, saturation: 100, level: 100],
-    "Indigo": [hue: 73, saturation: 100, level: 100],
-    "Purple": [hue: 77, saturation: 100, level: 100]
-];
-
-// Standardized strings
-@Field static final String STATIC = "static";
-@Field static final String RANDOM = "random";
-@Field static final String SEQUENTIAL = "sequential";
-
 @Field static final String ORDINAL = "ordinal";
 @Field static final String FIXED = "fixed";
 @Field static final String SPECIAL = "special";
@@ -1699,3 +1369,5 @@ private static LocalDate roshHashanahForYear(int year) {
 
 
 // #endregion
+
+#include evequefou.color-tools

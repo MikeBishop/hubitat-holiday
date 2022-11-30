@@ -1,0 +1,54 @@
+name: Create Hubitat Bundles
+on:
+  push:
+    branches:
+      - main
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v1
+    - name: Create Holiday Release Folder
+      run: |
+        mkdir ./holiday-release
+        cp color-tools.groovy ./holiday-release/evequefou.colortools.groovy
+        cp holiday-lights.groovy ./holiday-release/evequefou.HolidayLighting.groovy
+        cp bundle-manifests/holiday.txt ./holiday-release/install.txt
+        cp bundle-manifests/holiday.txt ./holiday-release/update.txt
+    - name: Create Palette Scenes Release Folder
+      run: |
+        mkdir ./palette-release
+        cp color-tools.groovy ./palette-release/evequefou.colortools.groovy
+        cp single-active-switch.groovy ./palette-release/evequefou.SingleActiveSwitch.groovy
+        cp palette-scenes.groovy ./palette-release/evequefou.PaletteScenes.groovy
+        cp palette-scene-instance.groovy ./palette-release/evequefou.PaletteSceneInstance.groovy
+        cp bundle-manifests/palette.txt ./palette-release/install.txt
+        cp bundle-manifests/palette.txt ./palette-release/update.txt
+    - name: Create zip files
+      run: |
+        pushd ./holiday-release
+        zip -r ../holiday-lights.zip .
+        popd
+        pushd ./palette-release
+        zip -r ../palette-scenes.zip .
+        popd
+    - name: Check PR or commit
+      uses: haya14busa/action-cond@v1
+      id: change_type
+      with:
+        cond: ${{ github.event_name == 'pull_request' }}
+        if_true: "minor"
+        if_false: "patch"
+    - name: Bump version and push tag
+      uses: anothrNick/github-tag-action@master
+      env:
+        RELEASE_BRANCHES: main
+        INITIAL_VERSION: 1.1.0
+        DEFAULT_BUMP: ${{ steps.change_type.outputs.value }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      id: tag
+    - uses: ncipollo/release-action@v1
+      with:
+        artifacts: "*.zip"
+        tag: ${{ steps.tag.outputs.new_tag }}
+        commit: ${{ github.sha }}
