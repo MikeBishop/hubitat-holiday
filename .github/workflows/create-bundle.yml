@@ -26,8 +26,12 @@ jobs:
         cp bundle-manifests/palette.txt ./palette-release/update.txt
     - name: Create zip files
       run: |
-        zip -r holiday-lights.zip ./holiday-release
-        zip -r palette-scenes.zip ./palette-release
+        pushd ./holiday-release
+        zip -r ../holiday-lights.zip .
+        popd
+        pushd ./palette-release
+        zip -r ../palette-scenes.zip .
+        popd
     - name: Bump version and push tag
       uses: anothrNick/github-tag-action@master
       env:
