@@ -1,0 +1,6 @@
+evequefou
+palette-scenes
+library evequefou.colortools.groovy
+driver evequefou.SingleActiveSwitch.groovy
+app evequefou.PaletteScenes.groovy
+app evequefou.PaletteSceneInstance.groovy
