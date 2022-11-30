@@ -749,7 +749,7 @@ private endHolidayPeriod() {
     lightsOff();
 }
 
-private beginIlluminationPeriod() {
+private beginIlluminationPeriod(event = null) {
     debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
