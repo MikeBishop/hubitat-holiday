@@ -738,6 +738,7 @@ private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
     unschedule("conditionalLightUpdate");
+    unschedule("runHandler")
     lightsOff();
 }
 
@@ -817,7 +818,8 @@ private triggerIllumination(event = null) {
     subscribe(lockTriggers, "lock.locked", "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
-    unschedule("doLightUpdate");
+    unschedule("conditionalLightUpdate");
+    unschedule("runHandler");
 }
 
 private checkIlluminationOff(event = null) {

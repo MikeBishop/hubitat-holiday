@@ -150,6 +150,7 @@ private relayLightUpdate() {
 void deactivatePalette(evt) {
     debug("Deactivating palette ${paletteName}");
     unschedule("relayLightUpdate");
+    unschedule("runHandler");
     unsubscribe(getControlSwitch(), "switch.off");
     parent.getRgbDevices()*.off();
 }
