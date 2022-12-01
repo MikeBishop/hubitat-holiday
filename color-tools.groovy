@@ -247,7 +247,7 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
     }
 }
 
-@Field static final List FREQ_OPTIONS = [
+@Field static final Map FREQ_OPTIONS = [
     0.25: "15 seconds",
     0.5: "30 seconds",
     1: "1 minute",
@@ -257,7 +257,7 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
     30: "30 minutes",
     60: "1 hour",
     180: "3 hours"
-]
+];
 
 @Field static final Map COLORS = [
     "Choose a Preset": "",
