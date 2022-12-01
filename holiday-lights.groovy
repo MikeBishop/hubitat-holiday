@@ -36,15 +36,7 @@ Map mainPage() {
             if(thisName) app.updateLabel("$thisName")
 
             input "frequency", "enum", title: "Update Frequency",
-                options: [
-                    1: "1 minute",
-                    5: "5 minutes",
-                    10: "10 minutes",
-                    15: "15 minutes",
-				    30: "30 minutes",
-				    60: "1 hour",
-				    180: "3 hours"
-                ], required: true
+                options: FREQ_OPTIONS, required: true
 
             def descr = "Choose which RGB/RGB bulbs to use"
             def deviceIndices = state.deviceIndices;
@@ -687,7 +679,7 @@ private testHoliday(index) {
     beginHolidayPeriod();
     if( settings["holiday${currentHoliday}Display"] != STATIC ) {
         [15, 30, 45].each {
-            runIn(it, "doLightUpdate");
+            runIn(it, "conditionalLightUpdate", [overwrite: false]);
         }
     }
     runIn(60, "beginStateMachine");
@@ -745,7 +737,7 @@ private conditionalLightUpdate() {
 private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
-    unschedule("doLightUpdate");
+    unschedule("conditionalLightUpdate");
     lightsOff();
 }
 
