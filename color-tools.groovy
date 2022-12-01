@@ -120,13 +120,14 @@ private drawColorSection(prefix, color, index) {
 
 private scheduleHandler(handlerName, frequency, recurring = true) {
     unschedule(handlerName);
+    unschedule("runHandler");
     if( frequency && recurring ) {
         debug("Scheduling ${handlerName} every ${frequency} minutes");
         def dFreq = Double.parseDouble(frequency);
         if (dFreq < 1 ) {
-            runEvery1Minute(runHandler, [data: [
+            runEvery1Minute("runHandler", [data: [
                 handlerName: handlerName,
-                interval: (int) (1.0/dFreq)
+                interval: (int) (60 * dFreq)
             ]]);
         }
         else {
@@ -157,18 +158,19 @@ private scheduleHandler(handlerName, frequency, recurring = true) {
             }
         }
     }
-    this."${handlerName}"()
+    else {
+        this."${handlerName}"()
+    }
 }
 
 private runHandler(data) {
     def handlerName = data.handlerName;
     def interval = data.interval;
-    def total = interval;
-    while (total < 60) {
-        runIn(total, handlerName);
-        total += interval;
-    }
-    this."${handlerName}"()
+    debug "Running ${handlerName} on interval ${interval}";
+    def delays = 0.step(60, interval) {
+        debug("Running ${handlerName} in ${it} seconds");
+        runIn(it, handlerName, [overwrite: false]);
+    };
 }
 
 private getColors(colorIndices, desiredLength, prefix = "") {

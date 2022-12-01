@@ -679,7 +679,7 @@ private testHoliday(index) {
     beginHolidayPeriod();
     if( settings["holiday${currentHoliday}Display"] != STATIC ) {
         [15, 30, 45].each {
-            runIn(it, "doLightUpdate");
+            runIn(it, "conditionalLightUpdate", [overwrite: false]);
         }
     }
     runIn(60, "beginStateMachine");
@@ -737,7 +737,7 @@ private conditionalLightUpdate() {
 private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
-    unschedule("doLightUpdate");
+    unschedule("conditionalLightUpdate");
     lightsOff();
 }
 
