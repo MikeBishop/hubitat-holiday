@@ -153,6 +153,10 @@ private scheduleHandler(handlerName, frequency, recurring = true) {
 
 private getColors(colorIndices, desiredLength, prefix = "") {
     debug("getColors(${colorIndices}, ${desiredLength}, ${prefix})")
+    if( desiredLength == 0 ) {
+        return [];
+    }
+
     def colors = colorIndices.collect{
         try {
             evaluate(settings["${prefix}Color${it}"])
@@ -166,8 +170,8 @@ private getColors(colorIndices, desiredLength, prefix = "") {
     colors = colors.findAll{it && it.containsKey("hue") && it.containsKey("saturation") && it.containsKey("level")};
 
     if( colors.size() <= 0 ) {
-        error("No valid colors found!");
-        return null;
+        warn("No valid colors found!");
+        return [];
     }
 
     def mode = settings["${prefix}Rotation"];
@@ -257,6 +261,10 @@ void debug(String msg) {
     if( debugSpew ) {
         log.debug(msg)
     }
+}
+
+void warn(String msg) {
+    log.warn(msg)
 }
 
 void error(Exception ex) {
