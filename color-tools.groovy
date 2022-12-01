@@ -122,31 +122,51 @@ private scheduleHandler(handlerName, frequency, recurring = true) {
     unschedule(handlerName);
     if( frequency && recurring ) {
         debug("Scheduling ${handlerName} every ${frequency} minutes");
-        switch(Integer.parseInt(frequency)) {
-            case 1:
-                runEvery1Minute(handlerName);
-                break;
-            case 5:
-                runEvery5Minutes(handlerName);
-                break;
-            case 10:
-                runEvery10Minutes(handlerName);
-                break;
-            case 15:
-                runEvery15Minutes(handlerName);
-                break;
-            case 30:
-                runEvery30Minutes(handlerName);
-                break;
-            case 60:
-                runEvery1Hour(handlerName);
-                break;
-            case 180:
-                runEvery3Hours(handlerName);
-                break;
-            default:
-                log.error "Invalid frequency: ${frequency.inspect()}";
+        def dFreq = Double.parseDouble(frequency);
+        if (dFreq < 1 ) {
+            runEvery1Minute(runHandler, [data: [
+                handlerName: handlerName,
+                interval: (int) (1.0/dFreq)
+            ]]);
         }
+        else {
+            switch(Integer.parseInt(frequency)) {
+                case 1:
+                    runEvery1Minute(handlerName);
+                    break;
+                case 5:
+                    runEvery5Minutes(handlerName);
+                    break;
+                case 10:
+                    runEvery10Minutes(handlerName);
+                    break;
+                case 15:
+                    runEvery15Minutes(handlerName);
+                    break;
+                case 30:
+                    runEvery30Minutes(handlerName);
+                    break;
+                case 60:
+                    runEvery1Hour(handlerName);
+                    break;
+                case 180:
+                    runEvery3Hours(handlerName);
+                    break;
+                default:
+                    log.error "Invalid frequency: ${frequency.inspect()}";
+            }
+        }
+    }
+    this."${handlerName}"()
+}
+
+private runHandler(data) {
+    def handlerName = data.handlerName;
+    def interval = data.interval;
+    def total = interval;
+    while (total < 60) {
+        runIn(total, handlerName);
+        total += interval;
     }
     this."${handlerName}"()
 }
@@ -226,6 +246,18 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
         }
     }
 }
+
+@Field static final List FREQ_OPTIONS = [
+    0.25: "15 seconds",
+    0.5: "30 seconds",
+    1: "1 minute",
+    5: "5 minutes",
+    10: "10 minutes",
+    15: "15 minutes",
+    30: "30 minutes",
+    60: "1 hour",
+    180: "3 hours"
+]
 
 @Field static final Map COLORS = [
     "Choose a Preset": "",

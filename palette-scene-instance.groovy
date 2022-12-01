@@ -62,15 +62,7 @@ def pageColorSelect() {
             }
             displayOptions()
             input "frequency", "enum", title: "Update Frequency",
-                options: [
-                    1: "1 minute",
-                    5: "5 minutes",
-                    10: "10 minutes",
-                    15: "15 minutes",
-				    30: "30 minutes",
-				    60: "1 hour",
-				    180: "3 hours"
-                ], required: true
+                options: FREQ_OPTIONS, required: true
             input "debugSpew", "bool", title: "Log debug messages?",
                 submitOnChange: true, defaultValue: getParent().debugSpew();
 
