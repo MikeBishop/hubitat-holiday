@@ -158,9 +158,7 @@ private scheduleHandler(handlerName, frequency, recurring = true) {
             }
         }
     }
-    else {
-        this."${handlerName}"()
-    }
+    this."${handlerName}"()
 }
 
 private runHandler(data) {
