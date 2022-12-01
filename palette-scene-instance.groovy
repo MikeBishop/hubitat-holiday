@@ -35,6 +35,7 @@ def uninstalled() {
 def updated() {
     log.info "Updated with settings: ${settings}"
     unsubscribe()
+    unschedule()
     initialize()
 }
 
