@@ -360,12 +360,6 @@ Map illuminationConfig() {
         section("Illumination timing") {
             selectStartStopTimes("illumination", "Illumination");
         }
-        def devices = state.deviceIndices.collect{settings["device${it}"]};
-        debug("${devices}");
-        def areLightsCT = devices*.hasCapability("ColorTemperature");
-        def anyCT = areLightsCT.any{ a -> a };
-        def anyNonCT = areLightsCT.any{ a -> !a };
-        debug("${areLightsCT}");
         section("Trigger Sources") {
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
@@ -373,48 +367,60 @@ Map illuminationConfig() {
             input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
         }
         section("Lights when Triggered") {
-            if( anyCT ) {
-                // Some lights support CT, so we can show the CT section.
-                ctConfig();
-            }
-            if( anyNonCT ) {
-                // Some lights do not support CT, so we need to show a color picker.
-                drawPicker("illuminationColor");
-                paragraph PICKER_JS, width:1;
-            }
+            getIlluminationConfig("triggered", false);
+            paragraph PICKER_JS, width:1;
         }
         section("Lights when not triggered") {
-            if( anyCT ) {
-                // All lights support both CT and RGB, so let the user pick
-                // the mode, not just on/off.
-                input "modeNotTriggered", "enum", title: "Mode", options: [
-                    OFF: "Off",
-                    CT: "Color Temperature",
-                    RGB: "RGB Color"
-                ], submitOnChange: true, required: true
-            }
-            else {
-                modeNotTriggered = null;
-                // No lights support CT, so we can only show the color picker.
-                input "lightsWhenNotTriggered", "boolean", title: "Turn on lights when not triggered?",
-                    defaultValue: false, submitOnChange: true
-            }
-
-            if( (modeNotTriggered && modeNotTriggered != OFF) || lightsWhenNotTriggered == true ) {
-                if( anyCT && modeNotTriggered == CT ) {
-                    ctConfig("untriggered");
-                }
-                if( modeNotTriggered == RGB || anyNonCT ) {
-                    drawPicker("untriggeredIlluminationColor");
-                }
-            }
+            getIlluminationConfig("idle", true);
         }
     }
 }
 
-private void ctConfig(String prefix = "") {
-    input "${prefix}colorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
-    input "${prefix}level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
+private void getIlluminationConfig(String prefix, bool allowOff) {
+    def devices = state.deviceIndices.collect{settings["device${it}"]};
+    debug("${devices}");
+    def areLightsCT = devices*.hasCapability("ColorTemperature");
+    def anyCT = areLightsCT.any{ a -> a };
+    def anyNonCT = areLightsCT.any{ a -> !a };
+    def options = [];
+    def mode;
+    if( allowOff ) {
+        options.add(OFF);
+    }
+    if( anyCT ) {
+        options.add(CT);
+    }
+    options.add(RGB);
+
+    if( options.size() == 1 ) {
+        mode = options[0];
+        settings["${prefix}IlluminationMode"] = options[0];
+    }
+    else if (options.size() == 2 ) {
+        def proxyKey = "${prefix}IlluminationModeProxy";
+        mode = settings[proxyKey] ? options[0] : options[1];
+        settings["${prefix}IlluminationMode"] = mode;
+        input proxyKey, "bool", defaultValue: true, submitOnChange: true,
+            title: maybeBold(options[0], !settings[proxyKey]) +
+                " or " +
+                maybeBold(options[1], settings[proxyKey])
+    }
+    else {
+        mode = settings["${prefix}IlluminationMode"];
+        input "${prefix}IlluminationMode", "enum", title: "Illumination Mode", options: options, submitOnChange: true
+    }
+
+    if( mode == CT ) {
+        input "${prefix}ColorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
+        input "${prefix}Level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
+        if( anyNonCT ) {
+            paragraph "Note: Some lights do not support color temperature, so they will be turned off."
+        }
+    }
+    else if( mode == RGB ) {
+        drawPicker("${prefix}IlluminationColor");
+    }
+
 }
 
 private selectStartStopTimes(prefix, description) {
@@ -657,6 +663,13 @@ void initialize() {
     state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
     state.deviceIndices = state.deviceIndices ?: [];
     debug("Initialize.... ${state.nextHolidayIndex.inspect()} and ${state.holidayIndices.inspect()}")
+
+    ["colorTemperature", "level", "illuminationColor"].each {
+        if( settings[it] ) {
+            settings["triggered" + it[0].toUpperCase + it[1..-1]] = settings[it];
+            app.removeSetting(it);
+        }
+    }
 }
 
 // #region Event Handlers

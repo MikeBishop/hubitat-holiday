@@ -11,6 +11,14 @@ import groovy.transform.Field
 
 @Field final static String PICKER_JS = '<script type="text/javascript" src="/local/13b8995f-5491-4c12-afed-efb45896e8b9-evequefou_color_picker.js"></script>'
 
+private String maybeBold(String text, boolean bold) {
+    if (bold) {
+        return "<b>${text}</b>"
+    } else {
+        return text
+    }
+}
+
 private deviceSelector() {
     def key;
     def displayIndex = 0
