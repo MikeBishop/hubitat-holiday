@@ -353,9 +353,8 @@ def pageColorSelect(params) {
 Map illuminationConfig() {
     debug("Rendering illuminationConfig");
     dynamicPage(name: "illuminationConfig", title: "Illumination Configuration") {
-        section("Switch Configuration") {
+        section("Control Switch") {
             input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
-            input "otherIlluminationSwitches", "capability.switch", title: "Other switches to turn on when triggered", multiple: true
         }
         section("Illumination timing") {
             selectStartStopTimes("illumination", "Illumination");
@@ -368,6 +367,8 @@ Map illuminationConfig() {
         }
         section("Lights when Triggered") {
             getIlluminationConfig("triggered", false);
+            input "otherIlluminationSwitches", "capability.switch",
+                title: "Other switches to turn on when triggered", multiple: true
             paragraph PICKER_JS, width:1;
         }
         section("Lights when not triggered") {
@@ -412,7 +413,7 @@ private void getIlluminationConfig(String prefix, bool allowOff) {
 
     if( mode == CT ) {
         input "${prefix}ColorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
-        input "${prefix}Level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
+        input "${prefix}Level", "number", title: "Brightness", width: 6, range: "1..100", required: true, defaultValue: "100"
         if( anyNonCT ) {
             paragraph "Note: Some lights do not support color temperature, so they will be turned off."
         }
@@ -783,7 +784,12 @@ private endHolidayPeriod() {
     state.currentHoliday = null;
     unschedule("conditionalLightUpdate");
     unschedule("runHandler")
-    lightsOff();
+    if( duringIlluminationPeriod() ) {
+        applyIlluminationSettings("untriggered");
+    }
+    else {
+        lightsOff();
+    }
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -823,38 +829,7 @@ private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = true;
     illuminationSwitch?.on();
-    def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
-    debug("CT-capable devices: ${ctDevices.inspect()}");
-    def rgbOnlyDevices = devices.minus(ctDevices);
-    debug("RGB devices: ${rgbOnlyDevices.inspect()}");
-
-    if( ctDevices ) {
-        if( colorTemperature == null ) {
-            warn("No color temperature set for illumination; defaulting to 2700");
-        }
-        if( level == null ) {
-            warn("No level set for illumination; defaulting to 100");
-        }
-        ctDevices*.setColorTemperature(colorTemperature ?: 2700, level ?: 100, null);
-    }
-    if( rgbOnlyDevices) {
-        def colorMap;
-
-        if( illuminationColor != null ) {
-            try {
-                    colorMap = evaluate(illuminationColor);
-            }
-            catch(Exception ex) {
-                error(ex);
-            }
-        }
-
-        if( colorMap == null ) {
-            warn("No color set for illumination; defaulting to white");
-        }
-        rgbOnlyDevices*.setColor(colorMap ?: COLORS["White"]);
-    }
+    applyIlluminationSettings("triggered");
     otherIlluminationSwitches*.on();
 
     subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
@@ -864,6 +839,50 @@ private triggerIllumination(event = null) {
     unschedule("turnOffIllumination");
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
+}
+
+private applyIlluminationSettings(String prefix) {
+    def devices = state.deviceIndices.collect{ settings["device${it}"] };
+    def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
+    debug("CT-capable devices: ${ctDevices.inspect()}");
+    def rgbOnlyDevices = devices.minus(ctDevices);
+    debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
+
+    switch( settings["${prefix}IlluminationMode"] ) {
+        case OFF:
+        default: // null will be common on upgrades
+            devices*.off();
+            break;
+        case CT:
+            def colorTemperature = settings["${prefix}ColorTemperature"];
+            def level = settings["${prefix}Level"];
+            if( colorTemperature == null ) {
+                warn("No color temperature set for ${prefix} illumination; defaulting to 2700");
+            }
+            if( level == null ) {
+                warn("No level set for illumination; defaulting to 100");
+            }
+            ctDevices*.setColorTemperature(colorTemperature ?: 2700, level ?: 100, null);
+            rgbOnlyDevices*.off();
+            break;
+        case RGB:
+            def colorMap = null;
+            def illuminationColor = settings["${prefix}IlluminationColor"];
+            if( illuminationColor != null ) {
+                try {
+                    colorMap = evaluate(illuminationColor);
+                }
+                catch(Exception ex) {
+                    error(ex);
+                }
+            }
+
+            if( colorMap == null ) {
+                warn("No color set for illumination; defaulting to white");
+            }
+            devices*.setColor(colorMap ?: COLORS["White"]);
+            break;
+    }
 }
 
 private checkIlluminationOff(event = null) {
@@ -889,7 +908,7 @@ private turnOffIllumination(event = null) {
     }
 
     if( !duringHolidayPeriod() ) {
-        // Lights Off
+        // Will check for untriggered illumination settings
         endHolidayPeriod();
     }
     else {
@@ -902,7 +921,7 @@ private turnOffIllumination(event = null) {
         }
         else {
             // No holiday to show; Lights Off
-            lightsOff();
+            endHolidayPeriod();
         }
     }
 }
@@ -1196,6 +1215,10 @@ private LocalTime getLocalTime(prefix) {
 @Field static final String SUNRISE = "sunrise";
 @Field static final String SUNSET = "sunset";
 @Field static final String CUSTOM = "custom";
+
+@Field static final String OFF = "Off";
+@Field static final String CT = "Color Temperature";
+@Field static final String RGB = "RGB Color";
 
 // Can't be constants because they reference other fields, but effectively constants.
 private Map GetHolidayByID(int id) {
