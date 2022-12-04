@@ -357,33 +357,64 @@ Map illuminationConfig() {
             input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
             input "otherIlluminationSwitches", "capability.switch", title: "Other switches to turn on when triggered", multiple: true
         }
-        section("Triggered Configuration") {
-            selectStartStopTimes("illumination", "Allow triggers");
+        section("Illumination timing") {
+            selectStartStopTimes("illumination", "Illumination");
+        }
+        def devices = state.deviceIndices.collect{settings["device${it}"]};
+        debug("${devices}");
+        def areLightsCT = devices*.hasCapability("ColorTemperature");
+        def anyCT = areLightsCT.any{ a -> a };
+        def anyNonCT = areLightsCT.any{ a -> !a };
+        debug("${areLightsCT}");
+        section("Trigger Sources") {
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
             input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
             input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
         }
-        def devices = state.deviceIndices.collect{settings["device${it}"]};
-        debug("${devices}");
-        def areLightsCT = devices*.hasCapability("ColorTemperature");
-        debug("${areLightsCT}");
-        if( areLightsCT.any{ a -> a }) {
-            // Some lights support CT, so we can show the CT section.
-            section("Config for CT lights") {
-                input "colorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
-                input "level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
+        section("Lights when Triggered") {
+            if( anyCT ) {
+                // Some lights support CT, so we can show the CT section.
+                ctConfig();
             }
-        }
-        if( areLightsCT.any{ a -> !a }) {
-            // Some lights do not support CT, so we need to show a color picker.
-            section("Config for non-CT lights") {
+            if( anyNonCT ) {
+                // Some lights do not support CT, so we need to show a color picker.
                 drawPicker("illuminationColor");
                 paragraph PICKER_JS, width:1;
             }
         }
-        debug("Finished with illuminationConfig");
+        section("Lights when not triggered") {
+            if( anyCT ) {
+                // All lights support both CT and RGB, so let the user pick
+                // the mode, not just on/off.
+                input "modeNotTriggered", "enum", title: "Mode", options: [
+                    OFF: "Off",
+                    CT: "Color Temperature",
+                    RGB: "RGB Color"
+                ], submitOnChange: true, required: true
+            }
+            else {
+                modeNotTriggered = null;
+                // No lights support CT, so we can only show the color picker.
+                input "lightsWhenNotTriggered", "boolean", title: "Turn on lights when not triggered?",
+                    defaultValue: false, submitOnChange: true
+            }
+
+            if( (modeNotTriggered && modeNotTriggered != OFF) || lightsWhenNotTriggered == true ) {
+                if( anyCT && modeNotTriggered == CT ) {
+                    ctConfig("untriggered");
+                }
+                if( modeNotTriggered == RGB || anyNonCT ) {
+                    drawPicker("untriggeredIlluminationColor");
+                }
+            }
+        }
     }
+}
+
+private void ctConfig(String prefix = "") {
+    input "${prefix}colorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
+    input "${prefix}level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
 }
 
 private selectStartStopTimes(prefix, description) {
