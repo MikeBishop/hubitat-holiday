@@ -372,12 +372,12 @@ Map illuminationConfig() {
             paragraph PICKER_JS, width:1;
         }
         section("Lights when not triggered") {
-            getIlluminationConfig("idle", true);
+            getIlluminationConfig("untriggered", true);
         }
     }
 }
 
-private void getIlluminationConfig(String prefix, bool allowOff) {
+private void getIlluminationConfig(String prefix, Boolean allowOff) {
     def devices = state.deviceIndices.collect{settings["device${it}"]};
     debug("${devices}");
     def areLightsCT = devices*.hasCapability("ColorTemperature");
@@ -399,16 +399,18 @@ private void getIlluminationConfig(String prefix, bool allowOff) {
     }
     else if (options.size() == 2 ) {
         def proxyKey = "${prefix}IlluminationModeProxy";
-        mode = settings[proxyKey] ? options[0] : options[1];
+        mode = settings[proxyKey] ? options[1] : options[0];
         settings["${prefix}IlluminationMode"] = mode;
         input proxyKey, "bool", defaultValue: true, submitOnChange: true,
-            title: maybeBold(options[0], !settings[proxyKey]) +
+            title: maybeBold(options[0], mode == options[0]) +
                 " or " +
-                maybeBold(options[1], settings[proxyKey])
+                maybeBold(options[1], mode == options[1])
     }
     else {
         mode = settings["${prefix}IlluminationMode"];
-        input "${prefix}IlluminationMode", "enum", title: "Illumination Mode", options: options, submitOnChange: true
+        input "${prefix}IlluminationMode", "enum", title: "Illumination Mode",
+            options: options, submitOnChange: true, defaultValue: options[0],
+            required: true
     }
 
     if( mode == CT ) {
@@ -667,7 +669,7 @@ void initialize() {
 
     ["colorTemperature", "level", "illuminationColor"].each {
         if( settings[it] ) {
-            settings["triggered" + it[0].toUpperCase + it[1..-1]] = settings[it];
+            app.updateSetting("triggered" + it[0].toUpperCase() + it[1..-1], settings[it]);
             app.removeSetting(it);
         }
     }
@@ -847,8 +849,10 @@ private applyIlluminationSettings(String prefix) {
     debug("CT-capable devices: ${ctDevices.inspect()}");
     def rgbOnlyDevices = devices.minus(ctDevices);
     debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
+    def mode = settings["${prefix}IlluminationMode"]
+    debug("Illumination mode: ${mode}");
 
-    switch( settings["${prefix}IlluminationMode"] ) {
+    switch( mode ) {
         case OFF:
         default: // null will be common on upgrades
             devices*.off();
@@ -858,11 +862,14 @@ private applyIlluminationSettings(String prefix) {
             def level = settings["${prefix}Level"];
             if( colorTemperature == null ) {
                 warn("No color temperature set for ${prefix} illumination; defaulting to 2700");
+                colorTemperature = 2700;
             }
             if( level == null ) {
                 warn("No level set for illumination; defaulting to 100");
+                level = 100;
             }
-            ctDevices*.setColorTemperature(colorTemperature ?: 2700, level ?: 100, null);
+            debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
+            ctDevices*.setColorTemperature(colorTemperature, level, null);
             rgbOnlyDevices*.off();
             break;
         case RGB:
@@ -879,8 +886,10 @@ private applyIlluminationSettings(String prefix) {
 
             if( colorMap == null ) {
                 warn("No color set for illumination; defaulting to white");
+                colorMap = COLORS["White"];
             }
-            devices*.setColor(colorMap ?: COLORS["White"]);
+            debug("Setting color to ${colorMap.inspect()}");
+            devices*.setColor(colorMap);
             break;
     }
 }
