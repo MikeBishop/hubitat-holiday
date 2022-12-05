@@ -395,12 +395,12 @@ private void getIlluminationConfig(String prefix, Boolean allowOff) {
 
     if( options.size() == 1 ) {
         mode = options[0];
-        settings["${prefix}IlluminationMode"] = options[0];
+        app.updateSetting("${prefix}IlluminationMode", options[0]);
     }
     else if (options.size() == 2 ) {
         def proxyKey = "${prefix}IlluminationModeProxy";
         mode = settings[proxyKey] ? options[1] : options[0];
-        settings["${prefix}IlluminationMode"] = mode;
+        app.updateSetting("${prefix}IlluminationMode", mode);
         input proxyKey, "bool", defaultValue: true, submitOnChange: true,
             title: maybeBold(options[0], mode == options[0]) +
                 " or " +
