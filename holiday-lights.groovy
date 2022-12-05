@@ -401,7 +401,7 @@ private void getIlluminationConfig(String prefix, Boolean allowOff) {
         def proxyKey = "${prefix}IlluminationModeProxy";
         mode = settings[proxyKey] ? options[1] : options[0];
         app.updateSetting("${prefix}IlluminationMode", mode);
-        input proxyKey, "bool", defaultValue: true, submitOnChange: true,
+        input proxyKey, "bool", defaultValue: false, submitOnChange: true,
             title: maybeBold(options[0], mode == options[0]) +
                 " or " +
                 maybeBold(options[1], mode == options[1])
