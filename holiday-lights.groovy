@@ -898,9 +898,9 @@ private applyIlluminationSettings(String prefix) {
 }
 
 private checkIlluminationOff(event = null) {
-    debug("Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : ""));
+    debug("Checking if illumination is still triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     if( !anyIlluminationTriggers() ) {
-            debug("No sensor activity detected, turning off illumination in ${duration} minutes");
+            debug("No sensor activity detected, switching to untriggered in ${duration} minutes");
             unsubscribe(motionTriggers, "motion.inactive");
             unsubscribe(contactTriggers, "contact.closed");
             unsubscribe(lockTriggers, "lock.locked");
@@ -909,7 +909,7 @@ private checkIlluminationOff(event = null) {
 }
 
 private turnOffIllumination(event = null) {
-    debug("Turning off illumination" + (event ? " after ${event.device} sent ${event.value}" : ""));
+    debug("Switching to untriggered illumination" + (event ? " after ${event.device} sent ${event.value}" : ""));
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
