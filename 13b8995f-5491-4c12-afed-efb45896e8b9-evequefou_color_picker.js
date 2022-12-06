@@ -2,7 +2,7 @@ function syncColors(pickerId, inputId) {
     debugger;
     let colorMap = document.getElementById(inputId);
     let picker = document.getElementById(pickerId);
-    let hueStr = '0', satStr = '0', valStr = '0';
+    let hueStr = '0', satStr = '0', levStr = '0';
     let colorStr = colorMap.value;
 
     if (colorStr) {
@@ -10,18 +10,24 @@ function syncColors(pickerId, inputId) {
             colorStr = colorStr.replace(/(\w+):/g, '"$1":');
             colorStr = colorStr.slice(1).slice(0, -1);
             const parsedColor = JSON.parse(`{${colorStr}}`);
-            hueStr = `${parsedColor.hue}`;
-            satStr = `${parsedColor.saturation}`;
-            levStr = `${parsedColor.level}`;
+            keys = Object.keys(parsedColor);
 
-            let hue = parseFloat(hueStr) / 100;
-            let sat = parseFloat(satStr) / 100;
-            let level = parseFloat(levStr) / 100;
+            if (keys.includes('hue') && keys.includes('saturation') && keys.includes('level')) {
+                hueStr = `${parsedColor.hue}`;
+                satStr = `${parsedColor.saturation}`;
+                levStr = `${parsedColor.level}`;
 
-            let RGB = HSVtoRGB(hue, sat, level);
+                if (!isNaN(hueStr) && !isNaN(satStr) && !isNaN(levStr)) {
+                    let hue = parseFloat(hueStr) / 100;
+                    let sat = parseFloat(satStr) / 100;
+                    let level = parseFloat(levStr) / 100;
 
-            picker.value = "#" + ((1 << 24) + (RGB.r << 16) + (RGB.g << 8) + RGB.b).toString(16).slice(1);
-            return;
+                    let RGB = HSVtoRGB(hue, sat, level);
+
+                    picker.value = "#" + ((1 << 24) + (RGB.r << 16) + (RGB.g << 8) + RGB.b).toString(16).slice(1);
+                    return;
+                }
+            }
         } catch (e) {
             // ignore
         }
