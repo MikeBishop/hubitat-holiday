@@ -806,6 +806,9 @@ private beginIlluminationPeriod(event = null) {
         debug("Sensor trigger is active");
         triggerIllumination();
     }
+    else {
+        turnOffIllumination();
+    }
 }
 
 private anyIlluminationTriggers() {
