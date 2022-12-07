@@ -1215,20 +1215,10 @@ private LocalDateTime getLocalTimeToday(prefix) {
     }
 }
 
-private LocalDateTime getLocalTimeTomorrow(prefix) {
-    def localTime = getLocalTime(prefix);
-    if( localTime ) {
-        return LocalDateTime.of(LocalDate.now().plusDays(1), localTime);
-    }
-    else {
-        return null;
-    }
-}
-
 private LocalDateTime getNextLocalTime(prefix) {
     def today = getLocalTimeToday(prefix);
     if( today && LocalDateTime.now().isAfter(today) ) {
-        return getLocalTimeTomorrow(prefix);
+        return today.plusDays(1);
     }
     else {
         return today;
