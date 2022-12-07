@@ -1189,7 +1189,7 @@ private Boolean duringPeriod(prefix) {
 
     if( !beginTime || !endTime ) {
         if( !activeModes ) {
-            log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
+            debug("No ${prefix} time set; ${beginTime} - ${endTime}");
         }
         return false;
     }
