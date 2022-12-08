@@ -1093,7 +1093,7 @@ private LocalDateTime getNextLocalTime(prefix) {
 }
 
 private LocalTime getLocalTime(prefix) {
-    def offset = settings["${prefix}Offset"] ?: 0;
+    def offset = settings["${prefix}TimeOffset"] ?: 0;
     def result;
     switch(settings["${prefix}Time"]) {
         case SUNRISE:
