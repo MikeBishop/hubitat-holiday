@@ -1064,7 +1064,7 @@ private scheduleSunriseAndSunset(event = null) {
 
                 if( scheduleFor.after(now) ) {
                     debug("Scheduling ${prefix} for ${scheduleFor} (${targetTime} with ${offset} minutes offset)");
-                    runOnce(scheduleFor, handler);
+                    runOnce(scheduleFor, handler, [overwrite: false]);
                 }
             }
         }
