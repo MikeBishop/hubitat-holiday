@@ -796,6 +796,10 @@ private endHolidayPeriod() {
 
 private beginIlluminationPeriod(event = null) {
     debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
+    if( state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+        debug("Ignoring duplicate switch trigger");
+        return;
+    }
     // Subscribe to the triggers
     subscribe(motionTriggers, "motion.active", "triggerIllumination");
     subscribe(contactTriggers, "contact.open", "triggerIllumination");
@@ -912,6 +916,10 @@ private checkIlluminationOff(event = null) {
 }
 
 private turnOffIllumination(event = null) {
+    if( !state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+        debug("Ignoring duplicate switch trigger");
+        return;
+    }
     debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     illuminationSwitch?.off();
     state.illuminationMode = false;
@@ -920,6 +928,11 @@ private turnOffIllumination(event = null) {
         unsubscribe(motionTriggers);
         unsubscribe(contactTriggers);
         unsubscribe(lockTriggers);
+    }
+    else {
+        unsubscribe(motionTriggers, "motion.inactive");
+        unsubscribe(contactTriggers, "contact.closed");
+        unsubscribe(lockTriggers, "lock.locked");
     }
 
     if( !duringHolidayPeriod() ) {
