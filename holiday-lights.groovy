@@ -828,6 +828,9 @@ private endIlluminationPeriod() {
         debug("End illumination period");
         turnOffIllumination();
     }
+    else {
+        debug("Not ending illumination period; still active");
+    }
 }
 
 private triggerIllumination(event = null) {
@@ -847,13 +850,13 @@ private triggerIllumination(event = null) {
 }
 
 private applyIlluminationSettings(String prefix) {
+    def mode = settings["${prefix}IlluminationMode"];
+    debug("Illumination mode for ${prefix}: ${mode}");
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
     def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
     debug("CT-capable devices: ${ctDevices.inspect()}");
     def rgbOnlyDevices = devices.minus(ctDevices);
     debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
-    def mode = settings["${prefix}IlluminationMode"]
-    debug("Illumination mode: ${mode}");
 
     switch( mode ) {
         case OFF:
@@ -909,7 +912,7 @@ private checkIlluminationOff(event = null) {
 }
 
 private turnOffIllumination(event = null) {
-    debug("Switching to untriggered illumination" + (event ? " after ${event.device} sent ${event.value}" : ""));
+    debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
