@@ -801,9 +801,8 @@ private beginIlluminationPeriod(event = null) {
         return;
     }
     // Subscribe to the triggers
-    subscribe(motionTriggers, "motion.active", "triggerIllumination");
-    subscribe(contactTriggers, "contact.open", "triggerIllumination");
-    subscribe(lockTriggers, "lock.unlocked", "triggerIllumination");
+    manageTriggerSubscriptions(true, false, "triggerIllumination");
+
     if( illuminationSwitch?.currentValue("switch") == "on" ||
         anyIlluminationTriggers()
     ) {
@@ -844,9 +843,7 @@ private triggerIllumination(event = null) {
     applyIlluminationSettings("triggered");
     otherIlluminationSwitches*.on();
 
-    subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
-    subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
-    subscribe(lockTriggers, "lock.locked", "checkIlluminationOff");
+    manageTriggerSubscriptions(false, true, "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unschedule("conditionalLightUpdate");
@@ -908,9 +905,7 @@ private checkIlluminationOff(event = null) {
     debug("Checking if illumination is still triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     if( !anyIlluminationTriggers() ) {
             debug("No sensor activity detected, switching to untriggered in ${duration} minutes");
-            unsubscribe(motionTriggers, "motion.inactive");
-            unsubscribe(contactTriggers, "contact.closed");
-            unsubscribe(lockTriggers, "lock.locked");
+            manageTriggerSubscriptions(false, true);
             runIn(duration * 60, "turnOffIllumination");
     }
 }
@@ -924,16 +919,7 @@ private turnOffIllumination(event = null) {
     illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
-    if( !duringIlluminationPeriod() ) {
-        unsubscribe(motionTriggers);
-        unsubscribe(contactTriggers);
-        unsubscribe(lockTriggers);
-    }
-    else {
-        unsubscribe(motionTriggers, "motion.inactive");
-        unsubscribe(contactTriggers, "contact.closed");
-        unsubscribe(lockTriggers, "lock.locked");
-    }
+    manageTriggerSubscriptions(!duringIlluminationPeriod(), true);
 
     if( !duringHolidayPeriod() ) {
         // Will check for untriggered illumination settings
@@ -1037,6 +1023,26 @@ private lightsOff() {
     devices*.off();
     otherIlluminationSwitches*.off();
     switchesForHoliday*.off();
+}
+
+private manageTriggerSubscriptions(active, inactive, handler = null) {
+    def triggerTypes =
+        [["motion", "active", "inactive"],
+         ["contact", "open", "closed"],
+         ["lock", "unlocked", "locked"]];
+    def operation = handler ? "subscribe" : "unsubscribe";
+
+    triggerTypes.each{
+        def type = it[0];
+        def activeEvent = "${type}.${it[1]}";
+        def inactiveEvent = "${type}.${it[2]}";
+        if( active ) {
+            this."${operation}"(settings["${type}Triggers"], activeEvent, handler);
+        }
+        if( inactive ) {
+            this."${operation}"(settings["${type}Triggers"], inactiveEvent, handler);
+        }
+    }
 }
 
 private scheduleSunriseAndSunset(event = null) {
