@@ -860,10 +860,6 @@ private applyIlluminationSettings(String prefix) {
     debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
 
     switch( mode ) {
-        case OFF:
-        default: // null will be common on upgrades
-            devices*.off();
-            break;
         case CT:
             def colorTemperature = settings["${prefix}ColorTemperature"];
             def level = settings["${prefix}Level"];
@@ -897,6 +893,10 @@ private applyIlluminationSettings(String prefix) {
             }
             debug("Setting color to ${colorMap.inspect()}");
             devices*.setColor(colorMap);
+            break;
+        case OFF:
+        default: // null will be common on upgrades
+            devices*.off();
             break;
     }
 }
