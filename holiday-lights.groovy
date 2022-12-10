@@ -379,7 +379,6 @@ Map illuminationConfig() {
 
 private void getIlluminationConfig(String prefix, Boolean allowOff) {
     def devices = state.deviceIndices.collect{settings["device${it}"]};
-    debug("${devices}");
     def areLightsCT = devices*.hasCapability("ColorTemperature");
     def anyCT = areLightsCT.any{ a -> a };
     def anyNonCT = areLightsCT.any{ a -> !a };
@@ -808,6 +807,7 @@ private beginIlluminationPeriod(event = null) {
     ) {
         debug("Sensor trigger is active");
         triggerIllumination();
+        checkIlluminationOff();
     }
     else {
         turnOffIllumination();
