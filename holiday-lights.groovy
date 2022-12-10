@@ -31,12 +31,15 @@ Map mainPage() {
     debug("Rendering mainPage");
     dynamicPage(name: "mainPage", title: "Holiday Lighting", install: true, uninstall: true) {
         initialize();
-        section("Options") {
+        section() {
+            paragraph "This app manages holiday lighting on RGB lights. " +
+            "It will turn on the lights during the time selected for the holiday. " +
+            "It can also turn on the lights at the time selected for " +
+            "non-holiday illumination. These time periods can overlap."
+        }
+        section() {
             input "thisName", "text", title: "Name this instance", submitOnChange: true
             if(thisName) app.updateLabel("$thisName")
-
-            input "frequency", "enum", title: "Update Frequency",
-                options: FREQ_OPTIONS, required: true
 
             def descr = "Choose which RGB/RGB bulbs to use"
             def deviceIndices = state.deviceIndices;
@@ -88,11 +91,24 @@ Map holidayDefinitions() {
             state.colorIndices = [:];
         }
 
+        section() {
+            paragraph "During the time selected for holiday lights, the colors " +
+            "selected for any current holiday will be shown. If multiple holidays " +
+            "overlap, the shortest holiday will be shown."
+
+            paragraph "Single-day holidays display the night before and night " +
+            "of the selected date. Multi-day holdays start " +
+            "and end as indicated."
+        }
+
         section("Devices and Times") {
             selectStartStopTimes("holiday", "Display holiday lights");
 
             input "switchesForHoliday", "capability.switch", multiple: true,
                 title: "Other switches to turn on when holiday lights are active"
+
+            input "frequency", "enum", title: "Update Frequency",
+                options: FREQ_OPTIONS, required: true
         }
 
         debug("Colors are ${state.colorIndices.inspect()}")
@@ -324,6 +340,22 @@ def pageColorSelect(params) {
 
     def name = settings["holiday${i}Name"] ?: "New Holiday"
     dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
+        section() {
+            paragraph "Select the colors and display options for ${name}."
+
+            def freqString = "${frequency} minutes";
+            if( frequency <= 1 ) {
+                freqString = "${frequency * 60} seconds";
+            }
+            paragraph "Static means that the colors will be applied to the lights once " +
+            "and will not change.  Otherwise, a new set of colors will " +
+            "be applied to the lights every ${freqString}. " +
+            "Random shuffles the colors between lights each time; if you have few colors " +
+            "and few lights, or if you opt to show a single color at a time, " +
+            "the result may be the same as the previous iteration and appear not to change. " +
+            "Sequential means that the colors will advance through the colors strictly in order, which " +
+            "may work better if the order matters or you only have 1-2 lights."
+        }
         section("Display Options") {
             displayOptions("holiday${i}");
             paragraph PICKER_JS, width: 1
@@ -353,25 +385,34 @@ def pageColorSelect(params) {
 Map illuminationConfig() {
     debug("Rendering illuminationConfig");
     dynamicPage(name: "illuminationConfig", title: "Illumination Configuration") {
+        section() {
+            paragraph "During the times and modes set below, the lights will be on, " +
+            "either all the time or only when sensors indicate activity. You " +
+            "can choose how the lights should behave when there's activity and " +
+            "when there's not."
+
+            paragraph "If the selected time overlaps with holiday times, the " +
+            "holiday settings will take precedence unless activity is detected."
+        }
         section("Control Switch") {
             input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
         }
         section("Illumination timing") {
             selectStartStopTimes("illumination", "Illumination");
         }
-        section("Trigger Sources") {
+        section("Activity Sensors") {
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
             input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
             input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
         }
-        section("Lights when Triggered") {
+        section("Lights When Activity Detected") {
             getIlluminationConfig("triggered", false);
             input "otherIlluminationSwitches", "capability.switch",
-                title: "Other switches to turn on when triggered", multiple: true
+                title: "Other switches to turn on", multiple: true
             paragraph PICKER_JS, width:1;
         }
-        section("Lights when not triggered") {
+        section("Lights When Idle") {
             getIlluminationConfig("untriggered", true);
         }
     }
