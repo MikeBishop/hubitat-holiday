@@ -906,7 +906,7 @@ private checkIlluminationOff(event = null) {
     if( !anyIlluminationTriggers() ) {
             debug("No sensor activity detected, switching to untriggered in ${duration} minutes");
             manageTriggerSubscriptions(false, true);
-            runIn(duration * 60, "turnOffIllumination");
+            runIn((duration ?: 0) * 60, "turnOffIllumination");
     }
 }
 
