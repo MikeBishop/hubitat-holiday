@@ -825,13 +825,8 @@ private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
     unschedule("conditionalLightUpdate");
-    unschedule("runHandler")
-    if( duringIlluminationPeriod() ) {
-        applyIlluminationSettings("untriggered");
-    }
-    else {
-        lightsOff();
-    }
+    unschedule("runHandler");
+    turnOffIllumination();
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -1071,17 +1066,18 @@ private manageTriggerSubscriptions(active, inactive, handler = null) {
         [["motion", "active", "inactive"],
          ["contact", "open", "closed"],
          ["lock", "unlocked", "locked"]];
-    def operation = handler ? "subscribe" : "unsubscribe";
 
     triggerTypes.each{
         def type = it[0];
         def activeEvent = "${type}.${it[1]}";
         def inactiveEvent = "${type}.${it[2]}";
-        if( active ) {
-            this."${operation}"(settings["${type}Triggers"], activeEvent, handler);
+        if( handler ) {
+            if( active ) this.subscribe(settings["${type}Triggers"], activeEvent, handler);
+            if( inactive ) this.subscribe(settings["${type}Triggers"], inactiveEvent, handler);
         }
-        if( inactive ) {
-            this."${operation}"(settings["${type}Triggers"], inactiveEvent, handler);
+        else {
+            if( active ) this.unsubscribe(settings["${type}Triggers"], activeEvent);
+            if( inactive ) this.unsubscribe(settings["${type}Triggers"], inactiveEvent);
         }
     }
 }
