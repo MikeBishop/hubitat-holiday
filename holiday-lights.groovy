@@ -731,7 +731,12 @@ void beginStateMachine() {
         subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
     }
     if( duringIlluminationPeriod() ) {
-        beginIlluminationPeriod();
+        manageTriggerSubscriptions(true, false, "triggerIllumination");
+        state.illuminationMode = illuminationSwitch?.currentValue("switch") == "on" ||
+            anyIlluminationTriggers();
+    }
+    if( duringHolidayPeriod() && !state.currentHoliday) {
+        state.currentHoliday =  getCurrentOrNextHoliday();
     }
 
     // Create schedules for things that don't change
@@ -753,10 +758,9 @@ void beginStateMachine() {
         debug("Illumination mode is on when starting");
         checkIlluminationOff();
     }
-    else {
-        turnOffIllumination();
-    }
-    // If not, turn off the lights and schedule for next holiday.
+
+    // If not, figure out where we go from here.
+    determineNextLightMode();
 }
 
 private testHoliday(index) {
@@ -807,6 +811,10 @@ private beginHolidayPeriod() {
             switchesForHoliday*.on();
         }
     }
+    else {
+        debug("No holiday is active");
+        endHolidayPeriod();
+    }
 }
 
 private conditionalLightUpdate() {
@@ -826,7 +834,7 @@ private endHolidayPeriod() {
     state.currentHoliday = null;
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
-    turnOffIllumination();
+    determineNextLightMode();
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -838,16 +846,9 @@ private beginIlluminationPeriod(event = null) {
     // Subscribe to the triggers
     manageTriggerSubscriptions(true, false, "triggerIllumination");
 
-    if( illuminationSwitch?.currentValue("switch") == "on" ||
-        anyIlluminationTriggers()
-    ) {
-        debug("Sensor trigger is active");
-        triggerIllumination();
-        checkIlluminationOff();
-    }
-    else {
-        turnOffIllumination();
-    }
+    state.illuminationMode = illuminationSwitch?.currentValue("switch") == "on" ||
+        anyIlluminationTriggers();
+    determineNextLightMode();
 }
 
 private anyIlluminationTriggers() {
@@ -884,6 +885,31 @@ private triggerIllumination(event = null) {
     unschedule("turnOffIllumination");
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
+}
+
+private determineNextLightMode() {
+    def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
+    def isIllumination = duringIlluminationPeriod();
+    def isTriggered = state.illuminationMode;
+
+    debug("Determine next light mode: holiday=${isHoliday}, illumination=${isIllumination}, triggered=${isTriggered}");
+    if( isIllumination && isTriggered ) {
+        triggerIllumination();
+        checkIlluminationOff();
+    }
+    else
+    {
+        illuminationSwitch?.off();
+        if ( isHoliday ) {
+            beginHolidayPeriod();
+        }
+        else if ( isIllumination ) {
+            applyIlluminationSettings("untriggered");
+        }
+        else {
+            lightsOff();
+        }
+    }
 }
 
 private applyIlluminationSettings(String prefix) {
@@ -952,28 +978,10 @@ private turnOffIllumination(event = null) {
         return;
     }
     debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    illuminationSwitch?.off();
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
     manageTriggerSubscriptions(!duringIlluminationPeriod(), true);
-
-    if( !duringHolidayPeriod() ) {
-        // Will check for untriggered illumination settings
-        endHolidayPeriod();
-    }
-    else {
-        def currentOrNext = getCurrentOrNextHoliday();
-        def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : [];
-        if ( holidayDates && dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) )
-        {
-            // Lights On
-            beginHolidayPeriod();
-        }
-        else {
-            // No holiday to show; Lights Off
-            endHolidayPeriod();
-        }
-    }
+    determineNextLightMode();
 }
 
 private dateIsBetweenInclusive(date, start, end) {
