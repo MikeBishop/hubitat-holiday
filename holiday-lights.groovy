@@ -753,13 +753,7 @@ void beginStateMachine() {
         subscribe(location, "mode", "onModeChange");
     }
 
-    // If illumination mode is active, should it be?
-    if( state.illuminationMode ) {
-        debug("Illumination mode is on when starting");
-        checkIlluminationOff();
-    }
-
-    // If not, figure out where we go from here.
+    // Figure out where we go from here.
     determineNextLightMode();
 }
 
