@@ -785,29 +785,15 @@ private onModeChange(evt) {
 private beginHolidayPeriod() {
     debug("Begin holiday period");
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
-    def currentHoliday = state.currentHoliday;
-    if( currentHoliday != null ) {
-        def dates = getHolidayDates(currentHoliday);
-        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
-        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
-        def now = LocalDateTime.now();
-
-        if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
-            debug("Holiday is active");
-
-            // We're going to start the display; unless it's static,
-            // schedule the updates.
-            def handlerName = "conditionalLightUpdate";
-            scheduleHandler(handlerName, frequency,
-                settings["holiday${currentHoliday}Display"] != STATIC &&
-                    !state.test
-            );
-            switchesForHoliday*.on();
-        }
+    if( state.currentHoliday == null ) {
+        debug("No holiday is active");
+        // This will call determineNextLightMode() for us.
+        endHolidayPeriod();
     }
     else {
-        debug("No holiday is active");
-        endHolidayPeriod();
+        // This will start the lights if the state is set, provided no triggers
+        // pre-empt them.
+        determineNextLightMode();
     }
 }
 
@@ -895,7 +881,28 @@ private determineNextLightMode() {
     {
         illuminationSwitch?.off();
         if ( isHoliday ) {
-            beginHolidayPeriod();
+            def currentHoliday = state.currentHoliday;
+            def dates = getHolidayDates(currentHoliday);
+            def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
+            def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
+            def now = LocalDateTime.now();
+
+            if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
+                debug("Holiday is active");
+
+                // We're going to start the display; unless it's static,
+                // schedule the updates.
+                def handlerName = "conditionalLightUpdate";
+                scheduleHandler(handlerName, frequency,
+                    settings["holiday${currentHoliday}Display"] != STATIC &&
+                        !state.test
+                );
+                switchesForHoliday*.on();
+            }
+            else {
+                debug("Holiday is not active");
+                endHolidayPeriod();
+            }
         }
         else if ( isIllumination ) {
             applyIlluminationSettings("untriggered");
