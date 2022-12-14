@@ -1149,7 +1149,7 @@ private startFixedSchedules() {
         def handler = it[1];
         if( settings["${prefix}Time"] == CUSTOM ) {
             def time = getAsTimeString(prefix);
-            debug("Scheduling ${prefix} for ${time} (custom)");
+            debug("Scheduling ${handler} for ${time} (custom)");
             schedule(time, handler);
         }
     }
