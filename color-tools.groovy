@@ -11,6 +11,14 @@ import groovy.transform.Field
 
 @Field final static String PICKER_JS = '<script type="text/javascript" src="/local/13b8995f-5491-4c12-afed-efb45896e8b9-evequefou_color_picker.js"></script>'
 
+private String maybeBold(String text, Boolean bold) {
+    if (bold) {
+        return "<b>${text}</b>"
+    } else {
+        return text
+    }
+}
+
 private deviceSelector() {
     def key;
     def displayIndex = 0
@@ -47,7 +55,7 @@ private deviceSelector() {
     }
 }
 
-private drawPicker(inputKey, pickerSuffix = "") {
+private drawPicker(inputKey) {
     def inputId = "settings[${inputKey}]";
     def colorOptions = COLORS.
         collect{ "<option value=\"${it.value}\">${it.key}</option>" }.
@@ -59,7 +67,7 @@ private drawPicker(inputKey, pickerSuffix = "") {
 
     // Next, inject a color picker (and its scripts) to help with setting
     // the map:
-    def pickerId = "colorPicker${pickerSuffix}"
+    def pickerId = "colorPicker-${inputKey}"
     paragraph "<input type=\"color\" id=\"${pickerId}\" style=\"width: 95%;\" onChange=\"" +
         "let mapElement = document.getElementById('${inputId}');" +
         "mapElement.value = '';" +
@@ -109,7 +117,7 @@ private drawColorSection(prefix, color, index) {
     section("Color ${index+1}") {
 
         // Map, picker, and presets displayed here
-        drawPicker(inputKey, color);
+        drawPicker(inputKey);
 
         // And finally a delete button.
         def delete = "<img src='${trashIcon}' width='30' style='float: left; width: 30px; margin: 5px 5px 0 -8px;'>"

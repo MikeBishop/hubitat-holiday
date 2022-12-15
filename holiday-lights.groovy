@@ -31,12 +31,15 @@ Map mainPage() {
     debug("Rendering mainPage");
     dynamicPage(name: "mainPage", title: "Holiday Lighting", install: true, uninstall: true) {
         initialize();
-        section("Options") {
+        section() {
+            paragraph "This app manages holiday lighting on RGB lights. " +
+            "It will turn on the lights during the time selected for the holiday. " +
+            "It can also turn on the lights at the time selected for " +
+            "non-holiday illumination. These time periods can overlap."
+        }
+        section() {
             input "thisName", "text", title: "Name this instance", submitOnChange: true
             if(thisName) app.updateLabel("$thisName")
-
-            input "frequency", "enum", title: "Update Frequency",
-                options: FREQ_OPTIONS, required: true
 
             def descr = "Choose which RGB/RGB bulbs to use"
             def deviceIndices = state.deviceIndices;
@@ -88,11 +91,24 @@ Map holidayDefinitions() {
             state.colorIndices = [:];
         }
 
+        section() {
+            paragraph "During the time selected for holiday lights, the colors " +
+            "selected for any current holiday will be shown. If multiple holidays " +
+            "overlap, the shortest holiday will be shown."
+
+            paragraph "Single-day holidays display the night before and night " +
+            "of the selected date. Multi-day holdays start " +
+            "and end as indicated."
+        }
+
         section("Devices and Times") {
             selectStartStopTimes("holiday", "Display holiday lights");
 
             input "switchesForHoliday", "capability.switch", multiple: true,
                 title: "Other switches to turn on when holiday lights are active"
+
+            input "frequency", "enum", title: "Update Frequency",
+                options: FREQ_OPTIONS, required: true
         }
 
         debug("Colors are ${state.colorIndices.inspect()}")
@@ -324,6 +340,22 @@ def pageColorSelect(params) {
 
     def name = settings["holiday${i}Name"] ?: "New Holiday"
     dynamicPage(name: "pageColorSelect", title: "Colors for ${name}") {
+        section() {
+            paragraph "Select the colors and display options for ${name}."
+
+            def freqString = "${frequency} minutes";
+            if( frequency <= 1 ) {
+                freqString = "${frequency * 60} seconds";
+            }
+            paragraph "Static means that the colors will be applied to the lights once " +
+            "and will not change.  Otherwise, a new set of colors will " +
+            "be applied to the lights every ${freqString}. " +
+            "Random shuffles the colors between lights each time; if you have few colors " +
+            "and few lights, or if you opt to show a single color at a time, " +
+            "the result may be the same as the previous iteration and appear not to change. " +
+            "Sequential means that the colors will advance through the colors strictly in order, which " +
+            "may work better if the order matters or you only have 1-2 lights."
+        }
         section("Display Options") {
             displayOptions("holiday${i}");
             paragraph PICKER_JS, width: 1
@@ -353,37 +385,85 @@ def pageColorSelect(params) {
 Map illuminationConfig() {
     debug("Rendering illuminationConfig");
     dynamicPage(name: "illuminationConfig", title: "Illumination Configuration") {
-        section("Switch Configuration") {
-            input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
-            input "otherIlluminationSwitches", "capability.switch", title: "Other switches to turn on when triggered", multiple: true
+        section() {
+            paragraph "During the times and modes set below, the lights will be on, " +
+            "either all the time or only when sensors indicate activity. You " +
+            "can choose how the lights should behave when there's activity and " +
+            "when there's not."
+
+            paragraph "If the selected time overlaps with holiday times, the " +
+            "holiday settings will take precedence unless activity is detected."
         }
-        section("Triggered Configuration") {
-            selectStartStopTimes("illumination", "Allow triggers");
+        section("Control Switch") {
+            input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
+        }
+        section("Illumination timing") {
+            selectStartStopTimes("illumination", "Illumination");
+        }
+        section("Activity Sensors") {
             input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
             input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
             input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
             input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
         }
-        def devices = state.deviceIndices.collect{settings["device${it}"]};
-        debug("${devices}");
-        def areLightsCT = devices*.hasCapability("ColorTemperature");
-        debug("${areLightsCT}");
-        if( areLightsCT.any{ a -> a }) {
-            // Some lights support CT, so we can show the CT section.
-            section("Config for CT lights") {
-                input "colorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
-                input "level", "number", title: "Brightness", width: 6, range: "0..100", required: true, defaultValue: "100"
-            }
+        section("Lights When Activity Detected") {
+            getIlluminationConfig("triggered", false);
+            input "otherIlluminationSwitches", "capability.switch",
+                title: "Other switches to turn on", multiple: true
+            paragraph PICKER_JS, width:1;
         }
-        if( areLightsCT.any{ a -> !a }) {
-            // Some lights do not support CT, so we need to show a color picker.
-            section("Config for non-CT lights") {
-                drawPicker("illuminationColor");
-                paragraph PICKER_JS, width:1;
-            }
+        section("Lights When Idle") {
+            getIlluminationConfig("untriggered", true);
         }
-        debug("Finished with illuminationConfig");
     }
+}
+
+private void getIlluminationConfig(String prefix, Boolean allowOff) {
+    def devices = state.deviceIndices.collect{settings["device${it}"]};
+    def areLightsCT = devices*.hasCapability("ColorTemperature");
+    def anyCT = areLightsCT.any{ a -> a };
+    def anyNonCT = areLightsCT.any{ a -> !a };
+    def options = [];
+    def mode;
+    if( allowOff ) {
+        options.add(OFF);
+    }
+    if( anyCT ) {
+        options.add(CT);
+    }
+    options.add(RGB);
+
+    if( options.size() == 1 ) {
+        mode = options[0];
+        app.updateSetting("${prefix}IlluminationMode", options[0]);
+    }
+    else if (options.size() == 2 ) {
+        def proxyKey = "${prefix}IlluminationModeProxy";
+        mode = settings[proxyKey] ? options[1] : options[0];
+        app.updateSetting("${prefix}IlluminationMode", mode);
+        input proxyKey, "bool", defaultValue: false, submitOnChange: true,
+            title: maybeBold(options[0], mode == options[0]) +
+                " or " +
+                maybeBold(options[1], mode == options[1])
+    }
+    else {
+        mode = settings["${prefix}IlluminationMode"];
+        input "${prefix}IlluminationMode", "enum", title: "Illumination Mode",
+            options: options, submitOnChange: true, defaultValue: options[0],
+            required: true
+    }
+
+    if( mode == CT ) {
+        input "${prefix}ColorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
+        input "${prefix}Level", "number", title: "Brightness", width: 6, range: "1..100", required: true, defaultValue: "100"
+        if( anyNonCT ) {
+            paragraph "Note: Some lights do not support color temperature, so they will be turned off."
+        }
+    }
+    else if( mode == RGB ) {
+        drawPicker("${prefix}IlluminationColor");
+    }
+
 }
 
 private selectStartStopTimes(prefix, description) {
@@ -626,6 +706,13 @@ void initialize() {
     state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
     state.deviceIndices = state.deviceIndices ?: [];
     debug("Initialize.... ${state.nextHolidayIndex.inspect()} and ${state.holidayIndices.inspect()}")
+
+    ["colorTemperature", "level", "illuminationColor"].each {
+        if( settings[it] ) {
+            app.updateSetting("triggered" + it[0].toUpperCase() + it[1..-1], settings[it]);
+            app.removeSetting(it);
+        }
+    }
 }
 
 // #region Event Handlers
@@ -644,7 +731,12 @@ void beginStateMachine() {
         subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
     }
     if( duringIlluminationPeriod() ) {
-        beginIlluminationPeriod();
+        manageTriggerSubscriptions(true, false, "triggerIllumination");
+        state.illuminationMode = illuminationSwitch?.currentValue("switch") == "on" ||
+            anyIlluminationTriggers();
+    }
+    if( duringHolidayPeriod() && !state.currentHoliday) {
+        state.currentHoliday =  getCurrentOrNextHoliday();
     }
 
     // Create schedules for things that don't change
@@ -661,15 +753,8 @@ void beginStateMachine() {
         subscribe(location, "mode", "onModeChange");
     }
 
-    // If illumination mode is active, should it be?
-    if( state.illuminationMode ) {
-        debug("Illumination mode is on when starting");
-        checkIlluminationOff();
-    }
-    else {
-        turnOffIllumination();
-    }
-    // If not, turn off the lights and schedule for next holiday.
+    // Figure out where we go from here.
+    determineNextLightMode();
 }
 
 private testHoliday(index) {
@@ -700,25 +785,15 @@ private onModeChange(evt) {
 private beginHolidayPeriod() {
     debug("Begin holiday period");
     state.currentHoliday = state.currentHoliday ?: getCurrentOrNextHoliday();
-    def currentHoliday = state.currentHoliday;
-    if( currentHoliday != null ) {
-        def dates = getHolidayDates(currentHoliday);
-        def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
-        def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
-        def now = LocalDateTime.now();
-
-        if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
-            debug("Holiday is active");
-
-            // We're going to start the display; unless it's static,
-            // schedule the updates.
-            def handlerName = "conditionalLightUpdate";
-            scheduleHandler(handlerName, frequency,
-                settings["holiday${currentHoliday}Display"] != STATIC &&
-                    !state.test
-            );
-            switchesForHoliday*.on();
-        }
+    if( state.currentHoliday == null ) {
+        debug("No holiday is active");
+        // This will call determineNextLightMode() for us.
+        endHolidayPeriod();
+    }
+    else {
+        // This will start the lights if the state is set, provided no triggers
+        // pre-empt them.
+        determineNextLightMode();
     }
 }
 
@@ -738,22 +813,22 @@ private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
     unschedule("conditionalLightUpdate");
-    unschedule("runHandler")
-    lightsOff();
+    unschedule("runHandler");
+    determineNextLightMode();
 }
 
 private beginIlluminationPeriod(event = null) {
     debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    // Subscribe to the triggers
-    subscribe(motionTriggers, "motion.active", "triggerIllumination");
-    subscribe(contactTriggers, "contact.open", "triggerIllumination");
-    subscribe(lockTriggers, "lock.unlocked", "triggerIllumination");
-    if( illuminationSwitch?.currentValue("switch") == "on" ||
-        anyIlluminationTriggers()
-    ) {
-        debug("Sensor trigger is active");
-        triggerIllumination();
+    if( state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+        debug("Ignoring duplicate switch trigger");
+        return;
     }
+    // Subscribe to the triggers
+    manageTriggerSubscriptions(true, false, "triggerIllumination");
+
+    state.illuminationMode = illuminationSwitch?.currentValue("switch") == "on" ||
+        anyIlluminationTriggers();
+    determineNextLightMode();
 }
 
 private anyIlluminationTriggers() {
@@ -773,94 +848,141 @@ private endIlluminationPeriod() {
         debug("End illumination period");
         turnOffIllumination();
     }
+    else {
+        debug("Not ending illumination period; still active");
+    }
 }
 
 private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = true;
     illuminationSwitch?.on();
-    def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
-    debug("CT-capable devices: ${ctDevices.inspect()}");
-    def rgbOnlyDevices = devices.minus(ctDevices);
-    debug("RGB devices: ${rgbOnlyDevices.inspect()}");
-
-    if( ctDevices ) {
-        if( colorTemperature == null ) {
-            warn("No color temperature set for illumination; defaulting to 2700");
-        }
-        if( level == null ) {
-            warn("No level set for illumination; defaulting to 100");
-        }
-        ctDevices*.setColorTemperature(colorTemperature ?: 2700, level ?: 100, null);
-    }
-    if( rgbOnlyDevices) {
-        def colorMap;
-
-        if( illuminationColor != null ) {
-            try {
-                    colorMap = evaluate(illuminationColor);
-            }
-            catch(Exception ex) {
-                error(ex);
-            }
-        }
-
-        if( colorMap == null ) {
-            warn("No color set for illumination; defaulting to white");
-        }
-        rgbOnlyDevices*.setColor(colorMap ?: COLORS["White"]);
-    }
+    applyIlluminationSettings("triggered");
     otherIlluminationSwitches*.on();
 
-    subscribe(motionTriggers, "motion.inactive", "checkIlluminationOff");
-    subscribe(contactTriggers, "contact.closed", "checkIlluminationOff");
-    subscribe(lockTriggers, "lock.locked", "checkIlluminationOff");
+    manageTriggerSubscriptions(false, true, "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
 }
 
+private determineNextLightMode() {
+    def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
+    def isIllumination = duringIlluminationPeriod();
+    def isTriggered = state.illuminationMode;
+
+    debug("Determine next light mode: holiday=${isHoliday}, illumination=${isIllumination}, triggered=${isTriggered}");
+    if( isIllumination && isTriggered ) {
+        triggerIllumination();
+        checkIlluminationOff();
+    }
+    else
+    {
+        illuminationSwitch?.off();
+        if ( isHoliday ) {
+            def currentHoliday = state.currentHoliday;
+            def dates = getHolidayDates(currentHoliday);
+            def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
+            def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
+            def now = LocalDateTime.now();
+
+            if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
+                debug("Holiday is active");
+
+                // We're going to start the display; unless it's static,
+                // schedule the updates.
+                def handlerName = "conditionalLightUpdate";
+                scheduleHandler(handlerName, frequency,
+                    settings["holiday${currentHoliday}Display"] != STATIC &&
+                        !state.test
+                );
+                switchesForHoliday*.on();
+            }
+            else {
+                debug("Holiday is not active");
+                endHolidayPeriod();
+            }
+        }
+        else if ( isIllumination ) {
+            applyIlluminationSettings("untriggered");
+        }
+        else {
+            lightsOff();
+        }
+    }
+}
+
+private applyIlluminationSettings(String prefix) {
+    def mode = settings["${prefix}IlluminationMode"];
+    debug("Illumination mode for ${prefix}: ${mode}");
+    def devices = state.deviceIndices.collect{ settings["device${it}"] };
+    def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
+    debug("CT-capable devices: ${ctDevices.inspect()}");
+    def rgbOnlyDevices = devices.minus(ctDevices);
+    debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
+
+    switch( mode ) {
+        case CT:
+            def colorTemperature = settings["${prefix}ColorTemperature"];
+            def level = settings["${prefix}Level"];
+            if( colorTemperature == null ) {
+                warn("No color temperature set for ${prefix} illumination; defaulting to 2700");
+                colorTemperature = 2700;
+            }
+            if( level == null ) {
+                warn("No level set for illumination; defaulting to 100");
+                level = 100;
+            }
+            debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
+            ctDevices*.setColorTemperature(colorTemperature, level, null);
+            rgbOnlyDevices*.off();
+            break;
+        case RGB:
+            def colorMap = null;
+            def illuminationColor = settings["${prefix}IlluminationColor"];
+            if( illuminationColor != null ) {
+                try {
+                    colorMap = evaluate(illuminationColor);
+                }
+                catch(Exception ex) {
+                    error(ex);
+                }
+            }
+
+            if( colorMap == null ) {
+                warn("No color set for illumination; defaulting to white");
+                colorMap = COLORS["White"];
+            }
+            debug("Setting color to ${colorMap.inspect()}");
+            devices*.setColor(colorMap);
+            break;
+        case OFF:
+        default: // null will be common on upgrades
+            devices*.off();
+            break;
+    }
+}
+
 private checkIlluminationOff(event = null) {
-    debug("Checking if illumination should be turned off" + (event ? " after ${event.device} sent ${event.value}" : ""));
+    debug("Checking if illumination is still triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     if( !anyIlluminationTriggers() ) {
-            debug("No sensor activity detected, turning off illumination in ${duration} minutes");
-            unsubscribe(motionTriggers, "motion.inactive");
-            unsubscribe(contactTriggers, "contact.closed");
-            unsubscribe(lockTriggers, "lock.locked");
-            runIn(duration * 60, "turnOffIllumination");
+            debug("No sensor activity detected, switching to untriggered in ${duration} minutes");
+            manageTriggerSubscriptions(false, true);
+            runIn((duration ?: 0) * 60, "turnOffIllumination");
     }
 }
 
 private turnOffIllumination(event = null) {
-    debug("Turning off illumination" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    illuminationSwitch?.off();
+    if( !state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+        debug("Ignoring duplicate switch trigger");
+        return;
+    }
+    debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = false;
     unschedule("turnOffIllumination");
-    if( !duringIlluminationPeriod() ) {
-        unsubscribe(motionTriggers);
-        unsubscribe(contactTriggers);
-        unsubscribe(lockTriggers);
-    }
-
-    if( !duringHolidayPeriod() ) {
-        // Lights Off
-        endHolidayPeriod();
-    }
-    else {
-        def currentOrNext = getCurrentOrNextHoliday();
-        def holidayDates = currentOrNext != null ? getHolidayDates(currentOrNext) : [];
-        if ( holidayDates && dateIsBetweenInclusive(LocalDate.now(), holidayDates[0], holidayDates[1]) )
-        {
-            // Lights On
-            beginHolidayPeriod();
-        }
-        else {
-            // No holiday to show; Lights Off
-            lightsOff();
-        }
-    }
+    manageTriggerSubscriptions(!duringIlluminationPeriod(), true);
+    determineNextLightMode();
 }
 
 private dateIsBetweenInclusive(date, start, end) {
@@ -948,6 +1070,27 @@ private lightsOff() {
     switchesForHoliday*.off();
 }
 
+private manageTriggerSubscriptions(active, inactive, handler = null) {
+    def triggerTypes =
+        [["motion", "active", "inactive"],
+         ["contact", "open", "closed"],
+         ["lock", "unlocked", "locked"]];
+
+    triggerTypes.each{
+        def type = it[0];
+        def activeEvent = "${type}.${it[1]}";
+        def inactiveEvent = "${type}.${it[2]}";
+        if( handler ) {
+            if( active ) this.subscribe(settings["${type}Triggers"], activeEvent, handler);
+            if( inactive ) this.subscribe(settings["${type}Triggers"], inactiveEvent, handler);
+        }
+        else {
+            if( active ) this.unsubscribe(settings["${type}Triggers"], activeEvent);
+            if( inactive ) this.unsubscribe(settings["${type}Triggers"], inactiveEvent);
+        }
+    }
+}
+
 private scheduleSunriseAndSunset(event = null) {
     def sunrise = [];
     def sunset = [];
@@ -1006,7 +1149,7 @@ private startFixedSchedules() {
         def handler = it[1];
         if( settings["${prefix}Time"] == CUSTOM ) {
             def time = getAsTimeString(prefix);
-            debug("Scheduling ${prefix} for ${time} (custom)");
+            debug("Scheduling ${handler} for ${time} (custom)");
             schedule(time, handler);
         }
     }
@@ -1149,6 +1292,10 @@ private LocalTime getLocalTime(prefix) {
 @Field static final String SUNRISE = "sunrise";
 @Field static final String SUNSET = "sunset";
 @Field static final String CUSTOM = "custom";
+
+@Field static final String OFF = "Off";
+@Field static final String CT = "Color Temperature";
+@Field static final String RGB = "RGB Color";
 
 // Can't be constants because they reference other fields, but effectively constants.
 private Map GetHolidayByID(int id) {
