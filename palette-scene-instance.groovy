@@ -40,6 +40,7 @@ def updated() {
 }
 
 def initialize() {
+    state.appType = PALLETTE_INSTANCE;
     def activator = getControlSwitch();
     if (activator != null) {
         debug("Activator: ${activator.label}")
@@ -144,7 +145,8 @@ void activatePalette(evt = null) {
 
 private relayLightUpdate() {
     debug("Do light update");
-    doLightUpdate(parent.getRgbDevices(), state.colorIndices);
+    doLightUpdate(parent.getRgbDevices().collect{ it.getDeviceNetworkId()},
+        state.colorIndices);
 }
 
 void deactivatePalette(evt) {

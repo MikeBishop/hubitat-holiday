@@ -701,6 +701,7 @@ void initialize() {
     if( state.deviceIndices instanceof Boolean ) {
         state.deviceIndices = []
     }
+    state.appType = HOLIDAY;
     state.nextHolidayIndex = state.nextHolidayIndex ?: 0;
     state.holidayIndices = state.holidayIndices ?: [];
     state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
@@ -802,7 +803,7 @@ private conditionalLightUpdate() {
     if( currentHoliday != null ) {
         debug("Do light update");
         doLightUpdate(
-            state.deviceIndices.collect{ settings["device${it}"] },
+            state.deviceIndices.collect{ "device${it}" },
             state.colorIndices["${currentHoliday}"],
             "holiday${currentHoliday}"
         )
@@ -812,9 +813,15 @@ private conditionalLightUpdate() {
 private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
+    state.lastColors = null;
+    unscheduleLightUpdate();
+    determineNextLightMode();
+}
+
+private unscheduleLightUpdate() {
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
-    determineNextLightMode();
+    unschedule("setColor");
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -863,8 +870,7 @@ private triggerIllumination(event = null) {
     manageTriggerSubscriptions(false, true, "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
-    unschedule("conditionalLightUpdate");
-    unschedule("runHandler");
+    unscheduleLightUpdate();
 }
 
 private determineNextLightMode() {
