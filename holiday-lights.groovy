@@ -812,6 +812,7 @@ private conditionalLightUpdate() {
 private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
+    state.lastColors = null;
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
     determineNextLightMode();

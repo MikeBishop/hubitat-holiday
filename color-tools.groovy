@@ -221,7 +221,15 @@ private getColors(colorIndices, desiredLength, prefix = "") {
         debug("Starting from offset ${offset} (next is ${state.sequentialIndex})");
     }
     def subList = result[offset..<(offset + desiredLength)];
+    def reshuffles = 0;
+    while( colors.size() > 1 && mode == RANDOM && subList == state.lastColors && reshuffles < 10) {
+        reshuffles++;
+        debug("Colors are the same as last time; shuffling and trying again");
+        Collections.shuffle(result);
+        subList = result[offset..<(offset + desiredLength)];
+    }
     debug("Sublist: ${subList.inspect()}");
+    state.lastColors = subList;
     return subList;
 }
 
