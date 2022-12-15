@@ -1181,7 +1181,6 @@ private Boolean duringPeriod(prefix) {
     def beginTime = getLocalTimeToday("${prefix}Start");
     def endTime = getLocalTimeToday("${prefix}Stop");
     def activeModes = settings["${prefix}Modes"];
-    def reverseResults = false;
 
     if( activeModes?.contains(location.getMode().toString()) ) {
         return true;
@@ -1194,12 +1193,9 @@ private Boolean duringPeriod(prefix) {
         return false;
     }
 
-    if( endTime < beginTime ) {
-        def swap = beginTime;
-        beginTime = endTime;
-        endTime = swap;
-        reverseResults = true;
-    }
+    def reverseResults = endTime < beginTime;
+    if( reverseResults ) (beginTime, endTime) = [endTime, beginTime];
+
     def now = LocalDateTime.now();
     def result = now.isAfter(beginTime) && now.isBefore(endTime);
     return reverseResults ? !result : result;
