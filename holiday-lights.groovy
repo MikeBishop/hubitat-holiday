@@ -350,11 +350,8 @@ def pageColorSelect(params) {
             paragraph "Static means that the colors will be applied to the lights once " +
             "and will not change.  Otherwise, a new set of colors will " +
             "be applied to the lights every ${freqString}. " +
-            "Random shuffles the colors between lights each time; if you have few colors " +
-            "and few lights, or if you opt to show a single color at a time, " +
-            "the result may be the same as the previous iteration and appear not to change. " +
-            "Sequential means that the colors will advance through the colors strictly in order, which " +
-            "may work better if the order matters or you only have 1-2 lights."
+            "Random shuffles the colors between lights each time, attempting to avoid repeats. " +
+            "Sequential means that the colors will advance through the colors strictly in order."
         }
         section("Display Options") {
             displayOptions("holiday${i}");
@@ -812,6 +809,7 @@ private conditionalLightUpdate() {
 private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
+    state.lastColors = null;
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
     determineNextLightMode();

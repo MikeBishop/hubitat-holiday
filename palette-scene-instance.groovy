@@ -152,6 +152,7 @@ void deactivatePalette(evt) {
     unschedule("relayLightUpdate");
     unschedule("runHandler");
     unsubscribe(getControlSwitch(), "switch.off");
+    state.lastColors = null;
     parent.getRgbDevices()*.off();
 }
 
