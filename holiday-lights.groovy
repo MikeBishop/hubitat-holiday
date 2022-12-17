@@ -816,11 +816,17 @@ private endHolidayPeriod() {
 }
 
 private beginIlluminationPeriod(event = null) {
-    debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    if( state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
-        debug("Ignoring duplicate switch trigger");
-        return;
+    if( illuminationSwitch && event?.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+        if( !state.illuminationMode ) {
+            state.lockIllumination = true;
+        }
+        else {
+            debug("Ignoring duplicate switch trigger");
+            return;
+        }
     }
+
+    debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
     // Subscribe to the triggers
     manageTriggerSubscriptions(true, false, "triggerIllumination");
 
@@ -830,6 +836,10 @@ private beginIlluminationPeriod(event = null) {
 }
 
 private anyIlluminationTriggers() {
+    if( state.lockIllumination ) {
+        return true;
+    }
+
     def motion = motionTriggers.any { it.currentValue("motion") == "active" };
     def contact = contactTriggers.any { it.currentValue("contact") == "open" };
     def lock = lockTriggers.any { it.currentValue("lock").startsWith("unlocked") };
@@ -842,7 +852,7 @@ private anyIlluminationTriggers() {
 }
 
 private endIlluminationPeriod() {
-    if( !duringIlluminationPeriod() ) {
+    if( !duringIlluminationPeriod() && !state.lockIllumination ) {
         debug("End illumination period");
         turnOffIllumination();
     }
@@ -972,9 +982,14 @@ private checkIlluminationOff(event = null) {
 }
 
 private turnOffIllumination(event = null) {
-    if( !state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
-        debug("Ignoring duplicate switch trigger");
-        return;
+    if( illuminationSwitch && event.device?.getDeviceNetworkId() == illuminationSwitch.getDeviceNetworkId() ) {
+        if( state.illuminationMode ) {
+            state.lockIllumination = false;
+        }
+        else {
+            debug("Ignoring duplicate switch trigger");
+            return;
+        }
     }
     debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = false;
