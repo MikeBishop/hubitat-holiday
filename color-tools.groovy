@@ -287,7 +287,6 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
 }
 
 private setColor(data) {
-    debug("setColor invoked with ${data.inspect()}")
     data.deviceColorPairs.groupBy{it.color.inspect()}.each{
         def color = it.value[0].color;
         def devices = it.value.collect{ hydrateDevice(it.device) };
