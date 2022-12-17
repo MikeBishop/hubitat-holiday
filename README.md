@@ -27,3 +27,4 @@ devices, you have full control of when this color palette starts and stops.
 * [7/18/2022]   Add support for Modes as an alternative to time period
 * [11/30/2022]  Moved code into library; new app Palette Scenes added
 * [12/14/2022]   HL: Permit setting behavior when illumination not triggered
+* [12/16/2022]  Added check for random producing identical output

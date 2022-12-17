@@ -350,11 +350,8 @@ def pageColorSelect(params) {
             paragraph "Static means that the colors will be applied to the lights once " +
             "and will not change.  Otherwise, a new set of colors will " +
             "be applied to the lights every ${freqString}. " +
-            "Random shuffles the colors between lights each time; if you have few colors " +
-            "and few lights, or if you opt to show a single color at a time, " +
-            "the result may be the same as the previous iteration and appear not to change. " +
-            "Sequential means that the colors will advance through the colors strictly in order, which " +
-            "may work better if the order matters or you only have 1-2 lights."
+            "Random shuffles the colors between lights each time, attempting to avoid repeats. " +
+            "Sequential means that the colors will advance through the colors strictly in order."
         }
         section("Display Options") {
             displayOptions("holiday${i}");
@@ -825,11 +822,17 @@ private unscheduleLightUpdate() {
 }
 
 private beginIlluminationPeriod(event = null) {
-    debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    if( state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
-        debug("Ignoring duplicate switch trigger");
-        return;
+    if( illuminationSwitch && event?.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+        if( !state.illuminationMode ) {
+            state.lockIllumination = true;
+        }
+        else {
+            debug("Ignoring duplicate switch trigger");
+            return;
+        }
     }
+
+    debug("Begin illumination period" + (event ? " after ${event.device} sent ${event.value}" : ""));
     // Subscribe to the triggers
     manageTriggerSubscriptions(true, false, "triggerIllumination");
 
@@ -839,6 +842,10 @@ private beginIlluminationPeriod(event = null) {
 }
 
 private anyIlluminationTriggers() {
+    if( state.lockIllumination ) {
+        return true;
+    }
+
     def motion = motionTriggers.any { it.currentValue("motion") == "active" };
     def contact = contactTriggers.any { it.currentValue("contact") == "open" };
     def lock = lockTriggers.any { it.currentValue("lock").startsWith("unlocked") };
@@ -851,7 +858,7 @@ private anyIlluminationTriggers() {
 }
 
 private endIlluminationPeriod() {
-    if( !duringIlluminationPeriod() ) {
+    if( !duringIlluminationPeriod() && !state.lockIllumination ) {
         debug("End illumination period");
         turnOffIllumination();
     }
@@ -980,9 +987,14 @@ private checkIlluminationOff(event = null) {
 }
 
 private turnOffIllumination(event = null) {
-    if( !state.illuminationMode && event && event.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
-        debug("Ignoring duplicate switch trigger");
-        return;
+    if( illuminationSwitch && event?.device?.getDeviceNetworkId() == illuminationSwitch.getDeviceNetworkId() ) {
+        if( state.illuminationMode ) {
+            state.lockIllumination = false;
+        }
+        else {
+            debug("Ignoring duplicate switch trigger");
+            return;
+        }
     }
     debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = false;
@@ -1187,7 +1199,6 @@ private Boolean duringPeriod(prefix) {
     def beginTime = getLocalTimeToday("${prefix}Start");
     def endTime = getLocalTimeToday("${prefix}Stop");
     def activeModes = settings["${prefix}Modes"];
-    def reverseResults = false;
 
     if( activeModes?.contains(location.getMode().toString()) ) {
         return true;
@@ -1195,17 +1206,14 @@ private Boolean duringPeriod(prefix) {
 
     if( !beginTime || !endTime ) {
         if( !activeModes ) {
-            log.warn "No ${prefix} time set; ${beginTime} - ${endTime}";
+            debug("No ${prefix} time set; ${beginTime} - ${endTime}");
         }
         return false;
     }
 
-    if( endTime < beginTime ) {
-        def swap = beginTime;
-        beginTime = endTime;
-        endTime = swap;
-        reverseResults = true;
-    }
+    def reverseResults = endTime < beginTime;
+    if( reverseResults ) (beginTime, endTime) = [endTime, beginTime];
+
     def now = LocalDateTime.now();
     def result = now.isAfter(beginTime) && now.isBefore(endTime);
     return reverseResults ? !result : result;
@@ -1221,20 +1229,10 @@ private LocalDateTime getLocalTimeToday(prefix) {
     }
 }
 
-private LocalDateTime getLocalTimeTomorrow(prefix) {
-    def localTime = getLocalTime(prefix);
-    if( localTime ) {
-        return LocalDateTime.of(LocalDate.now().plusDays(1), localTime);
-    }
-    else {
-        return null;
-    }
-}
-
 private LocalDateTime getNextLocalTime(prefix) {
     def today = getLocalTimeToday(prefix);
     if( today && LocalDateTime.now().isAfter(today) ) {
-        return getLocalTimeTomorrow(prefix);
+        return today.plusDays(1);
     }
     else {
         return today;
