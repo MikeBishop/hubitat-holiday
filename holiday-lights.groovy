@@ -982,7 +982,7 @@ private checkIlluminationOff(event = null) {
 }
 
 private turnOffIllumination(event = null) {
-    if( illuminationSwitch && event.device?.getDeviceNetworkId() == illuminationSwitch.getDeviceNetworkId() ) {
+    if( illuminationSwitch && event?.device?.getDeviceNetworkId() == illuminationSwitch.getDeviceNetworkId() ) {
         if( state.illuminationMode ) {
             state.lockIllumination = false;
         }
