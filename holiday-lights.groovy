@@ -420,20 +420,24 @@ Map illuminationConfig() {
 
 private void getIlluminationConfig(String prefix, Boolean allowOff) {
     def devices = state.deviceIndices.collect{settings["device${it}"]};
-    def areLightsCT = devices*.hasCapability("ColorTemperature");
-    def anyCT = areLightsCT.any{ a -> a };
-    def anyNonCT = areLightsCT.any{ a -> !a };
+    devices += otherIlluminationSwitches ?: [];
     def options = [];
     def mode;
     if( allowOff ) {
         options.add(OFF);
     }
-    if( anyCT ) {
+    if( devices*.hasCapability("ColorTemperature").any{ a -> a } ) {
         options.add(CT);
     }
-    options.add(RGB);
+    if( devices*.hasCapability("ColorControl").any{ a -> a } ) {
+        options.add(RGB);
+    }
 
-    if( options.size() == 1 ) {
+    if( options.size() == 0 ) {
+        paragraph "No lights with color or color temperature capabilities selected."
+        app.clearSetting("${prefix}IlluminationMode");
+    }
+    else if( options.size() == 1 ) {
         mode = options[0];
         app.updateSetting("${prefix}IlluminationMode", options[0]);
     }
@@ -456,12 +460,15 @@ private void getIlluminationConfig(String prefix, Boolean allowOff) {
     if( mode == CT ) {
         input "${prefix}ColorTemperature", "number", title: "Color temperature", width: 6, required: true, defaultValue: "2700"
         input "${prefix}Level", "number", title: "Brightness", width: 6, range: "1..100", required: true, defaultValue: "100"
-        if( anyNonCT ) {
+        if( devices.findAll{ it.hasCapability("ColorControl") && !it.hasCapability("ColorTemperature") } ) {
             paragraph "Note: Some lights do not support color temperature, so they will be turned off."
         }
     }
     else if( mode == RGB ) {
         drawPicker("${prefix}IlluminationColor");
+        if( devices.findAll{ it.hasCapability("ColorTemperature") && !it.hasCapability("ColorControl") } ) {
+            paragraph "Note: Some CT lights do not support RGB, so they will be turned off."
+        }
     }
 
 }
@@ -933,7 +940,7 @@ private applyIlluminationSettings(String prefix) {
     def mode = settings["${prefix}IlluminationMode"];
     debug("Illumination mode for ${prefix}: ${mode}");
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    devices += otherIlluminationSwitches;
+    devices += otherIlluminationSwitches ?: [];
     def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
     def rgbDevices = devices.findAll { it.hasCapability("ColorControl")};
     def simpleDevices = devices.findAll { !it.hasCapability("ColorControl") && !it.hasCapability("ColorTemperature") };
