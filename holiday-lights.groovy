@@ -473,7 +473,7 @@ private selectStartStopTimes(prefix, description) {
             input "${prefix}${it}TimeCustom", "time", title: "Specify ${it.toLowerCase()} time:", width: 6
         }
         else if (settings["${prefix}${it}Time"]) {
-            input "${prefix}${it}TimeOffset", "number", title: "Start ${it.toLowerCase()} offset in minutes:", width: 6, range: "-240:240"
+            input "${prefix}${it}TimeOffset", "number", title: "${it} offset in minutes:", width: 6, range: "-240:240"
         }
     }
     input "${prefix}Modes", "enum", title: "${description} during the following modes, regardless of time...",
