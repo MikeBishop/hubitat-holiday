@@ -40,15 +40,22 @@ def updated() {
 }
 
 def initialize() {
+    state.appType = PALLETTE_INSTANCE;
     def activator = getControlSwitch();
     if (activator != null) {
         debug("Activator: ${activator.label}")
         subscribe(activator, "switch.on", "activatePalette");
     }
     if( activator.currentValue("switch") == "on" ) {
-        unschedule("relayLightUpdate")
+        unscheduleLightUpdate();
         activatePalette()
     }
+}
+
+private unscheduleLightUpdate() {
+    unschedule("relayLightUpdate");
+    unschedule("runHandler");
+    unschedule("setColor");
 }
 
 def pageColorSelect() {
@@ -135,6 +142,7 @@ private getControlSwitch() {
 
 void activatePalette(evt = null) {
     debug("Activating palette ${paletteName}: ${settings[ALIGNMENT] ? "different" : "same"} colors, ${settings[ROTATION]} pattern");
+    state.appType = PALLETTE_INSTANCE;
     subscribe(getControlSwitch(), "switch.off", "deactivatePalette");
 
     // We're going to start the display; unless it's static,
@@ -144,13 +152,13 @@ void activatePalette(evt = null) {
 
 private relayLightUpdate() {
     debug("Do light update");
-    doLightUpdate(parent.getRgbDevices(), state.colorIndices);
+    doLightUpdate(parent.getRgbDevices().collect{ it.getDeviceNetworkId()},
+        state.colorIndices);
 }
 
 void deactivatePalette(evt) {
     debug("Deactivating palette ${paletteName}");
-    unschedule("relayLightUpdate");
-    unschedule("runHandler");
+    unscheduleLightUpdate();
     unsubscribe(getControlSwitch(), "switch.off");
     state.lastColors = null;
     parent.getRgbDevices()*.off();

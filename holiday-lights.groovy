@@ -230,6 +230,9 @@ Map pageImport() {
                             app.updateSetting("holiday${i}Alignment",
                                 colorSettings["type"] != STATIC || colorSettings["colors"]?.size() > 1);
                             app.updateSetting("holiday${i}Rotation", colorSettings["type"]);
+                            if( colorSettings["type"] == RANDOM ) {
+                                app.updateSetting("holiday${i}" + STAGGER, true);
+                            }
                             colorSettings["colors"].each {
                                 def idToImport = AddColorToHoliday(i);
                                 app.updateSetting("holiday${i}Color${idToImport}", it.toString());
@@ -698,6 +701,7 @@ void initialize() {
     if( state.deviceIndices instanceof Boolean ) {
         state.deviceIndices = []
     }
+    state.appType = HOLIDAY;
     state.nextHolidayIndex = state.nextHolidayIndex ?: 0;
     state.holidayIndices = state.holidayIndices ?: [];
     state.nextDeviceIndex = state.nextDeviceIndex ?: 0;
@@ -799,7 +803,7 @@ private conditionalLightUpdate() {
     if( currentHoliday != null ) {
         debug("Do light update");
         doLightUpdate(
-            state.deviceIndices.collect{ settings["device${it}"] },
+            state.deviceIndices.collect{ "device${it}" },
             state.colorIndices["${currentHoliday}"],
             "holiday${currentHoliday}"
         )
@@ -810,9 +814,14 @@ private endHolidayPeriod() {
     debug("Not in holiday period");
     state.currentHoliday = null;
     state.lastColors = null;
+    unscheduleLightUpdate();
+    determineNextLightMode();
+}
+
+private unscheduleLightUpdate() {
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
-    determineNextLightMode();
+    unschedule("setColor");
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -871,8 +880,7 @@ private triggerIllumination(event = null) {
     manageTriggerSubscriptions(false, true, "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
-    unschedule("conditionalLightUpdate");
-    unschedule("runHandler");
+    unscheduleLightUpdate();
 }
 
 private determineNextLightMode() {

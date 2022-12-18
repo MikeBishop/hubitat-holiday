@@ -93,14 +93,21 @@ private drawPicker(inputKey) {
 }
 
 private displayOptions(prefix = "") {
-    input "${prefix}${ALIGNMENT}", "bool", title: "Different colors on different lights?",
-                width: 5, submitOnChange: true, defaultValue: true
+    input "${prefix}${ALIGNMENT}", "bool",
+        title: "Different colors on different lights?",
+        width: 4, submitOnChange: true, defaultValue: true
     input "${prefix}${ROTATION}", "enum", title: "How to rotate colors",
-        width: 5, options: [
+        width: 4, options: [
             (RANDOM): "Random",
             (STATIC):  "Static",
             (SEQUENTIAL): "Sequential"
         ], submitOnChange: true
+    def staggerKey = prefix + STAGGER;
+    def stagger = settings[staggerKey];
+    input staggerKey, "bool",
+        title: "Change lights ${maybeBold("simultaneously", !stagger)} " +
+            "or ${maybeBold("separately", stagger)}?",
+        width: 4, submitOnChange: true
     if( !settings["${prefix}${ALIGNMENT}"] && settings["${prefix}${ROTATION}"] == STATIC) {
         paragraph "Note: With this combination, only the first color will ever be used!"
     }
@@ -132,10 +139,11 @@ private scheduleHandler(handlerName, frequency, recurring = true) {
     if( frequency && recurring ) {
         debug("Scheduling ${handlerName} every ${frequency} minutes");
         def dFreq = Double.parseDouble(frequency);
+        state.spread = dFreq * 60;
         if (dFreq < 1 ) {
             runEvery1Minute("runHandler", [data: [
                 handlerName: handlerName,
-                interval: (int) (60 * dFreq)
+                interval: (int) (state.spread)
             ]]);
         }
         else {
@@ -252,15 +260,72 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
     );
 
     // Apply the colors to the devices.
-    debug("Applying colors ${colors.inspect()} to devices ${devices.inspect()}");
-    [devices, colors].transpose().each {
-        def device = it[0];
-        def color = it[1];
-        debug("Setting ${device} to ${color}");
-        if( color ) {
-            device*.setColor(color);
-        }
+    def delays = generateDelays(prefix, devices.size());
+    [
+        devices,
+        colors,
+        delays
+    ].transpose().
+      collectMany{
+        def innerDelays = generateDelays(prefix, it[0].size());
+        [
+            it[0],
+            innerDelays
+        ].transpose().
+        collect{ deviceAndTime -> [deviceAndTime[0], it[1], deviceAndTime[1] + it[2]] }
+      }.groupBy{it[2]}.
+      each {
+        def delay = it.key;
+        def deviceColorPairs = it.value.collect{ [device: it[0], color: it[1]] };
+        debug("Setting ${deviceColorPairs.inspect()} in ${delay} seconds")
+        runInMillis((Long) (delay * 1000), "setColor", [
+            data: [
+                deviceColorPairs: deviceColorPairs
+            ],
+            overwrite: false
+        ]);
     }
+}
+
+private setColor(data) {
+    data.deviceColorPairs.groupBy{it.color.inspect()}.each{
+        def color = it.value[0].color;
+        def devices = it.value.collect{ hydrateDevice(it.device) };
+        debug("Setting ${devices} to ${color}");
+        devices*.setColor(color);
+    }
+}
+
+private hydrateDevice(deviceID) {
+    // This requires knowledge of the parent app's structure.
+    switch(state.appType) {
+        case HOLIDAY:
+            return settings[deviceID];
+        case PALLETTE_INSTANCE:
+            return parent.getRgbDevices().find{it.deviceNetworkId == deviceID};
+        default:
+            log.error "Invalid app type: ${state.appType}";
+            return null;
+    }
+}
+
+private generateDelays(prefix, count) {
+    if( count == 1 ) {
+        return [0];
+    }
+
+    def stagger = settings[prefix + STAGGER];
+    def result = [];
+    if( stagger ) {
+        0.step(state.spread, state.spread / count) {
+            result << it;
+        }
+        Collections.shuffle(result);
+    }
+    else {
+        result = (0..<count).collect{ 0 };
+    }
+    return result;
 }
 
 @Field static final Map FREQ_OPTIONS = [
@@ -302,6 +367,10 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
 @Field static final String STATIC = "static";
 @Field static final String RANDOM = "random";
 @Field static final String SEQUENTIAL = "sequential";
+@Field static final String STAGGER = "Stagger";
+
+@Field static final String HOLIDAY = "Holiday";
+@Field static final String PALLETTE_INSTANCE = "Pallette Instance";
 
 @Field static final String trashIcon = "https://raw.githubusercontent.com/MikeBishop/hubitat-holiday/main/images/trash40.png"
 
