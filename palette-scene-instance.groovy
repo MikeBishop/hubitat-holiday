@@ -47,9 +47,15 @@ def initialize() {
         subscribe(activator, "switch.on", "activatePalette");
     }
     if( activator.currentValue("switch") == "on" ) {
-        unschedule("relayLightUpdate")
+        unscheduleLightUpdate();
         activatePalette()
     }
+}
+
+private unscheduleLightUpdate() {
+    unschedule("relayLightUpdate");
+    unschedule("runHandler");
+    unschedule("setColor");
 }
 
 def pageColorSelect() {
@@ -151,8 +157,7 @@ private relayLightUpdate() {
 
 void deactivatePalette(evt) {
     debug("Deactivating palette ${paletteName}");
-    unschedule("relayLightUpdate");
-    unschedule("runHandler");
+    unscheduleLightUpdate();
     unsubscribe(getControlSwitch(), "switch.off");
     state.lastColors = null;
     parent.getRgbDevices()*.off();
