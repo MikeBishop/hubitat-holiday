@@ -142,6 +142,7 @@ private getControlSwitch() {
 
 void activatePalette(evt = null) {
     debug("Activating palette ${paletteName}: ${settings[ALIGNMENT] ? "different" : "same"} colors, ${settings[ROTATION]} pattern");
+    state.appType = PALLETTE_INSTANCE;
     subscribe(getControlSwitch(), "switch.off", "deactivatePalette");
 
     // We're going to start the display; unless it's static,
