@@ -230,6 +230,9 @@ Map pageImport() {
                             app.updateSetting("holiday${i}Alignment",
                                 colorSettings["type"] != STATIC || colorSettings["colors"]?.size() > 1);
                             app.updateSetting("holiday${i}Rotation", colorSettings["type"]);
+                            if( colorSettings["type"] == RANDOM ) {
+                                app.updateSetting("holiday${i}" + STAGGER, true);
+                            }
                             colorSettings["colors"].each {
                                 def idToImport = AddColorToHoliday(i);
                                 app.updateSetting("holiday${i}Color${idToImport}", it.toString());
