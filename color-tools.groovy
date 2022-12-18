@@ -102,8 +102,9 @@ private displayOptions(prefix = "") {
             (STATIC):  "Static",
             (SEQUENTIAL): "Sequential"
         ], submitOnChange: true
-    def stagger = settings["${prefix}${STAGGER}"]
-    input prefix + STAGGER, "bool",
+    def staggerKey = prefix + STAGGER;
+    def stagger = settings[staggerKey];
+    input staggerKey, "bool",
         title: "Change lights ${maybeBold("simultaneously", !stagger)} " +
             "or ${maybeBold("separately", stagger)}?",
         width: 4, submitOnChange: true
