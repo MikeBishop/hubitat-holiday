@@ -394,8 +394,10 @@ Map illuminationConfig() {
             paragraph "If the selected time overlaps with holiday times, the " +
             "holiday settings will take precedence unless activity is detected."
         }
-        section("Control Switch") {
+        section("Switch Configuration") {
             input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
+            input "otherIlluminationSwitches", "capability.switch",
+                title: "Additional lights to use", multiple: true
         }
         section("Illumination timing") {
             selectStartStopTimes("illumination", "Illumination");
@@ -408,8 +410,6 @@ Map illuminationConfig() {
         }
         section("Lights When Activity Detected") {
             getIlluminationConfig("triggered", false);
-            input "otherIlluminationSwitches", "capability.switch",
-                title: "Other switches to turn on", multiple: true
             paragraph PICKER_JS, width:1;
         }
         section("Lights When Idle") {
@@ -875,7 +875,6 @@ private triggerIllumination(event = null) {
     state.illuminationMode = true;
     illuminationSwitch?.on();
     applyIlluminationSettings("triggered");
-    otherIlluminationSwitches*.on();
 
     manageTriggerSubscriptions(false, true, "checkIlluminationOff");
     subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
@@ -913,6 +912,7 @@ private determineNextLightMode() {
                     settings["holiday${currentHoliday}Display"] != STATIC &&
                         !state.test
                 );
+                otherIlluminationSwitches*.off();
                 switchesForHoliday*.on();
             }
             else {
@@ -933,15 +933,18 @@ private applyIlluminationSettings(String prefix) {
     def mode = settings["${prefix}IlluminationMode"];
     debug("Illumination mode for ${prefix}: ${mode}");
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
+    devices += otherIlluminationSwitches;
     def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
-    debug("CT-capable devices: ${ctDevices.inspect()}");
-    def rgbOnlyDevices = devices.minus(ctDevices);
-    debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
+    def rgbDevices = devices.findAll { it.hasCapability("ColorControl")};
+    def simpleDevices = devices.findAll { !it.hasCapability("ColorControl") && !it.hasCapability("ColorTemperature") };
+    def dimmers = simpleDevices.findAll { it.hasCapability("SwitchLevel") };
+    def switches = simpleDevices.minus(dimmers);
+    def level = null;
 
     switch( mode ) {
         case CT:
             def colorTemperature = settings["${prefix}ColorTemperature"];
-            def level = settings["${prefix}Level"];
+            level = settings["${prefix}Level"];
             if( colorTemperature == null ) {
                 warn("No color temperature set for ${prefix} illumination; defaulting to 2700");
                 colorTemperature = 2700;
@@ -952,7 +955,11 @@ private applyIlluminationSettings(String prefix) {
             }
             debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
             ctDevices*.setColorTemperature(colorTemperature, level, null);
-            rgbOnlyDevices*.off();
+            dimmers*.setLevel(level);
+            simpleDevices.minus(dimmers)*.on();
+
+            // Turn off any RGB-only devices
+            devices.minus(ctDevices).minus(simpleDevices)*.off();
             break;
         case RGB:
             def colorMap = null;
@@ -971,7 +978,14 @@ private applyIlluminationSettings(String prefix) {
                 colorMap = COLORS["White"];
             }
             debug("Setting color to ${colorMap.inspect()}");
-            devices*.setColor(colorMap);
+            rgbDevices*.setColor(colorMap);
+            dimmers*.setLevel(level);
+            simpleDevices.minus(dimmers)*.on();
+
+            level = colorMap["level"] ?: 100;
+
+            // Turn off any CT-only devices
+            devices.minus(rgbDevices).minus(simpleDevices)*.off();
             break;
         case OFF:
         default: // null will be common on upgrades
