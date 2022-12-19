@@ -715,6 +715,10 @@ void initialize() {
     state.deviceIndices = state.deviceIndices ?: [];
     debug("Initialize.... ${state.nextHolidayIndex.inspect()} and ${state.holidayIndices.inspect()}")
 
+    updateSettings();
+}
+
+void updateSettings() {
     ["colorTemperature", "level", "illuminationColor"].each {
         if( settings[it] ) {
             app.updateSetting("triggered" + it[0].toUpperCase() + it[1..-1], settings[it]);
@@ -890,6 +894,7 @@ private triggerIllumination(event = null) {
 }
 
 private determineNextLightMode() {
+    updateSettings();
     def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
     def isIllumination = duringIlluminationPeriod();
     def isTriggered = state.illuminationMode;
@@ -938,7 +943,6 @@ private determineNextLightMode() {
 
 private applyIlluminationSettings(String prefix) {
     def mode = settings["${prefix}IlluminationMode"];
-    debug("Illumination mode for ${prefix}: ${mode}");
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
     devices += otherIlluminationSwitches ?: [];
     def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
@@ -947,6 +951,19 @@ private applyIlluminationSettings(String prefix) {
     def dimmers = simpleDevices.findAll { it.hasCapability("SwitchLevel") };
     def switches = simpleDevices.minus(dimmers);
     def level = null;
+
+    if( mode == null ) {
+        if( prefix == "triggered" ) {
+            mode = (
+                    ( ctDevices.size() >= devices.size() / 2) &&
+                    settings["triggeredColorTemperature"] != null) ?
+                CT : RGB;
+        }
+        else {
+            mode = OFF;
+        }
+    }
+    debug("Illumination mode for ${prefix}: ${mode}");
 
     switch( mode ) {
         case CT:
@@ -995,8 +1012,10 @@ private applyIlluminationSettings(String prefix) {
             devices.minus(rgbDevices).minus(simpleDevices)*.off();
             break;
         case OFF:
-        default: // null will be common on upgrades
             devices*.off();
+            break;
+        default:
+            error("Unknown illumination mode: ${mode}");
             break;
     }
 }
