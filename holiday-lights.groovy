@@ -346,9 +346,10 @@ def pageColorSelect(params) {
         section() {
             paragraph "Select the colors and display options for ${name}."
 
-            def freqString = "${frequency} minutes";
-            if( frequency <= 1 ) {
-                freqString = "${frequency * 60} seconds";
+            def floatFreq = Double.parseDouble(frequency);
+            def freqString = "${(int) floatFreq} minutes";
+            if( floatFreq <= 1 ) {
+                freqString = "${(int) (floatFreq * 60)} seconds";
             }
             paragraph "Static means that the colors will be applied to the lights once " +
             "and will not change.  Otherwise, a new set of colors will " +
