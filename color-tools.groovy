@@ -243,6 +243,15 @@ private getColors(colorIndices, desiredLength, prefix = "") {
 
 def doLightUpdate(devices, colorIndices, prefix = "") {
     // Assemble the list of devices to use.
+
+    // If any extra devices are RGB, include them.
+    //
+    // (Note, this setting won't exist for Palette Lights)
+    def extraRgb = switchesForHoliday?.
+      findAll{it.hasCapability("ColorControl")}.
+      collect{it.getDeviceNetworkId()} ?: [];
+    devices += extraRgb;
+
     if( settings[prefix + ALIGNMENT] ) {
         // Multiple colors displayed simultaneously.
         devices = devices.collect{ [it] };
@@ -285,6 +294,16 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
             overwrite: false
         ]);
     }
+
+    def level = colors[0]?.level ?: 100;
+    switchesForHoliday.minus(extraRgb).each{
+        if( it.hasCapability("SwitchLevel") ) {
+            it.setLevel(level);
+        }
+        else {
+            it.on();
+        }
+    }
 }
 
 private setColor(data) {
@@ -300,6 +319,12 @@ private hydrateDevice(deviceID) {
     // This requires knowledge of the parent app's structure.
     switch(state.appType) {
         case HOLIDAY:
+            if( settings.containsKey(deviceID) ) {
+                return settings[deviceID];
+            }
+            else {
+                return switchesForHoliday.find{it.deviceNetworkId == deviceID};
+            }
             return settings[deviceID];
         case PALLETTE_INSTANCE:
             return parent.getRgbDevices().find{it.deviceNetworkId == deviceID};
