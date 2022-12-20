@@ -262,7 +262,7 @@ Map pageImport() {
 def pageEditHoliday(params) {
     debug("Rendering pageEditHoliday");
     Integer i
-    if( params.holidayIndex != null ) {
+    if( params?.holidayIndex != null ) {
         i = params.holidayIndex
         state.editingHolidayIndex = i
     }
@@ -616,8 +616,13 @@ private DeleteHoliday(int index) {
         debug("Removing setting ${it}")
         app.removeSetting(it);
     }
-    state.colorIndices.remove("${index}");
-    state.imported.remove("${index}");
+    [state.colorIndices, state.imported].each{
+        it?.findAll{
+            !state.holidayIndices.contains(Integer.parseInt(it.key))
+        }.each{ k,v ->
+            it.remove(k);
+        }
+    };
 }
 
 private DeleteColor(int holidayIndex, int colorIndex) {
