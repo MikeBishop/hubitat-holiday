@@ -288,6 +288,10 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
 }
 
 private setColor(data) {
+    if( state.illuminationMode ) {
+        debug("Skipping setColor because illumination mode is active");
+        return;
+    }
     data.deviceColorPairs.groupBy{it.color.inspect()}.each{
         def color = it.value[0].color;
         def devices = it.value.collect{ hydrateDevice(it.device) };
