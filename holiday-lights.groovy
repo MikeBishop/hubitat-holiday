@@ -743,11 +743,17 @@ void beginStateMachine() {
     }
     if( duringIlluminationPeriod() ) {
         manageTriggerSubscriptions(true, false, "triggerIllumination");
-        state.illuminationMode = illuminationSwitch?.currentValue("switch") == "on" ||
-            anyIlluminationTriggers();
+        if( state.lockIllumination && illuminationSwitch?.currentValue("switch") == "on" ) {
+            state.illuminationMode = true;
+        }
+        else {
+            state.lockIllumination = false;
+            state.illuminationMode = anyIlluminationTriggers();
+        }
     }
-    if( duringHolidayPeriod() && !state.currentHoliday) {
-        state.currentHoliday =  getCurrentOrNextHoliday();
+    if( duringHolidayPeriod() ) {
+        def possibleHoliday = getCurrentOrNextHoliday();
+        state.currentHoliday = isDuringHoliday(possibleHoliday) ? possibleHoliday : null;
     }
 
     // Create schedules for things that don't change
@@ -908,13 +914,7 @@ private determineNextLightMode() {
     {
         illuminationSwitch?.off();
         if ( isHoliday ) {
-            def currentHoliday = state.currentHoliday;
-            def dates = getHolidayDates(currentHoliday);
-            def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
-            def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
-            def now = LocalDateTime.now();
-
-            if( state.test || (now.isAfter(startTime) && now.isBefore(endTime)) ) {
+            if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
 
                 // We're going to start the display; unless it's static,
@@ -1058,7 +1058,7 @@ private getHolidayDates(index) {
         }
         // ...or it starts this year and ends next year.
         else {
-        endDate = holidayDate(index, "End", nextYear);
+            endDate = holidayDate(index, "End", nextYear);
         }
     }
 
@@ -1212,6 +1212,15 @@ private startFixedSchedules() {
 // #endregion
 
 // #region Time Helper Functions
+
+private isDuringHoliday(currentHoliday) {
+    def dates = getHolidayDates(currentHoliday);
+    def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
+    def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
+    def now = LocalDateTime.now();
+
+    return now.isAfter(startTime) && now.isBefore(endTime);
+}
 
 private getAsTimeString(prefix) {
     def legacyDate = timeToday(settings["${prefix}TimeCustom"]);
