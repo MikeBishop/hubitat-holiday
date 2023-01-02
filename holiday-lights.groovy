@@ -1040,6 +1040,7 @@ private getHolidayDates(index) {
     def today = LocalDate.now()
     def thisYear = today.getYear();
     def nextYear = thisYear + 1;
+    def lastYear = thisYear - 1;
 
     def startDate = holidayDate(index, "Start", thisYear);
     def endDate = holidayDate(index, "End", thisYear);
@@ -1051,7 +1052,14 @@ private getHolidayDates(index) {
 
     // If the end date is before the start date, it crosses the year boundary.
     if( endDate.isBefore(startDate) ) {
+        // Either it started last year and ends this year...
+        if( today.isBefore(endDate) ) {
+            startDate = holidayDate(index, "Start", lastYear);
+        }
+        // ...or it starts this year and ends next year.
+        else {
         endDate = holidayDate(index, "End", nextYear);
+        }
     }
 
     // If the end date has passed, we need to move to the next occurrence.
