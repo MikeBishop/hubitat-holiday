@@ -974,7 +974,7 @@ private applyIlluminationSettings(String prefix) {
                 level = 100;
             }
             debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
-            ctDevices*.setColorTemperature(colorTemperature, level, null);
+            ctDevices*.setColorTemperature(colorTemperature, level);
             rgbOnlyDevices*.off();
             break;
         case RGB:
