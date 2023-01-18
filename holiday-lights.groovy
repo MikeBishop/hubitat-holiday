@@ -421,6 +421,7 @@ Map illuminationConfig() {
             }
         }
         def anyTriggers = motionTriggers || contactTriggers || lockTriggers || illuminationSwitch;
+        def untriggeredMode = settings["untriggeredIlluminationMode"];
         if( anyTriggers ) {
             section("Lights When Activity Detected") {
                 getIlluminationConfig("triggered", false);
@@ -428,7 +429,7 @@ Map illuminationConfig() {
                     title: "Other switches to turn on", multiple: true
             }
         }
-        else if( settings["untriggeredIlluminationMode"] == null ) {
+        else if( untriggeredMode == null || untriggeredMode == OFF ) {
             app.updateSetting("untriggeredIlluminationMode",
                 state.deviceIndices.collect{settings["device${it}"]}*.
                     hasCapability("ColorTemperature").any{ a -> a } ?
@@ -436,7 +437,7 @@ Map illuminationConfig() {
         }
 
         section("Lights " + (anyTriggers ? "When Idle" : "During Illumination Period")) {
-            getIlluminationConfig("untriggered", true);
+            getIlluminationConfig("untriggered", anyTriggers);
         }
     }
 }
