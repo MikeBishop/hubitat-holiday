@@ -889,7 +889,12 @@ private endIlluminationPeriod() {
 private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = true;
-    illuminationSwitch?.on();
+    if( !state.lockIllumination ) {
+        // If we're locked, it's because the switch is already on.
+        // Latent BUGBUG if we support multiple illumination switches
+        // in the future.
+        illuminationSwitch?.on();
+    }
     applyIlluminationSettings("triggered");
     otherIlluminationSwitches*.on();
 
