@@ -405,6 +405,9 @@ Map illuminationConfig() {
         section("Illumination timing") {
             selectStartStopTimes("illumination", "Illumination");
         }
+
+        def anySensors = motionTriggers || contactTriggers || lockTriggers;
+        def anyTriggers = anySensors || illuminationSwitch;
         section("Activity Sensors") {
             input "motionTriggers", "capability.motionSensor",
                 title: "Motion sensors to trigger lights when active",
@@ -416,14 +419,13 @@ Map illuminationConfig() {
                 title: "Locks to trigger lights when unlocked",
                 multiple: true, submitOnChange: true
 
-            if( motionTriggers || contactTriggers || lockTriggers ) {
+            if( anySensors ) {
                 input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
             }
         }
-        def anyTriggers = motionTriggers || contactTriggers || lockTriggers || illuminationSwitch;
         def untriggeredMode = settings["untriggeredIlluminationMode"];
         if( anyTriggers ) {
-            section("Lights When Activity Detected") {
+            section("Lights When " + (anySensors ? "Activity Detected" : "Switched On")) {
                 getIlluminationConfig("triggered", false);
                 input "otherIlluminationSwitches", "capability.switch",
                     title: "Other switches to turn on", multiple: true
