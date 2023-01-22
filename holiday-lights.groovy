@@ -841,7 +841,7 @@ private unscheduleLightUpdate() {
 }
 
 private beginIlluminationPeriod(event = null) {
-    if( illuminationSwitch && event?.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+    if( illuminationSwitch?.getDeviceNetworkId() != null && event?.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
         if( !state.illuminationMode ) {
             state.lockIllumination = true;
         }
