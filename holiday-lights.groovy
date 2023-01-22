@@ -889,17 +889,16 @@ private endIlluminationPeriod() {
 private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = true;
-    if( !state.lockIllumination ) {
-        // If we're locked, it's because the switch is already on.
-        // Latent BUGBUG if we support multiple illumination switches
-        // in the future.
-        illuminationSwitch?.on();
-    }
+
+    // Turn on the illumination switch, but stop listening to on
+    unsubscribe(illuminationSwitch, "switch.on");
+    illuminationSwitch?.on();
+    subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
+
     applyIlluminationSettings("triggered");
     otherIlluminationSwitches*.on();
 
     manageTriggerSubscriptions(false, true, "checkIlluminationOff");
-    subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unscheduleLightUpdate();
 }
@@ -1031,7 +1030,11 @@ private turnOffIllumination(event = null) {
     }
     debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = false;
+
     unschedule("turnOffIllumination");
+    unsubscribe(illuminationSwitch, "switch.off");
+    subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
+
     manageTriggerSubscriptions(!duringIlluminationPeriod(), true);
     determineNextLightMode();
 }
