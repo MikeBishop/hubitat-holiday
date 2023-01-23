@@ -394,27 +394,52 @@ Map illuminationConfig() {
 
             paragraph "If the selected time overlaps with holiday times, the " +
             "holiday settings will take precedence unless activity is detected."
+
+            paragraph PICKER_JS, width:1;
         }
         section("Control Switch") {
-            input "illuminationSwitch", "capability.switch", title: "Switch to control/reflect illumination state"
+            input "illuminationSwitch", "capability.switch",
+                title: "Switch to control/reflect illumination state",
+                submitOnChange: true
         }
         section("Illumination timing") {
             selectStartStopTimes("illumination", "Illumination");
         }
+
+        def anySensors = motionTriggers || contactTriggers || lockTriggers;
+        def anyTriggers = anySensors || illuminationSwitch;
         section("Activity Sensors") {
-            input "motionTriggers", "capability.motionSensor", title: "Motion sensors to trigger lights when active", multiple: true
-            input "contactTriggers", "capability.contactSensor", title: "Contact sensors to trigger lights when open", multiple: true
-            input "lockTriggers", "capability.lock", title: "Locks to trigger lights when unlocked", multiple: true
-            input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
+            input "motionTriggers", "capability.motionSensor",
+                title: "Motion sensors to trigger lights when active",
+                multiple: true, submitOnChange: true
+            input "contactTriggers", "capability.contactSensor",
+                title: "Contact sensors to trigger lights when open",
+                multiple: true, submitOnChange: true
+            input "lockTriggers", "capability.lock",
+                title: "Locks to trigger lights when unlocked",
+                multiple: true, submitOnChange: true
+
+            if( anySensors ) {
+                input "duration", "number", title: "How many minutes to stay illuminated after sensor activity stops?"
+            }
         }
-        section("Lights When Activity Detected") {
-            getIlluminationConfig("triggered", false);
-            input "otherIlluminationSwitches", "capability.switch",
-                title: "Other switches to turn on", multiple: true
-            paragraph PICKER_JS, width:1;
+        def untriggeredMode = settings["untriggeredIlluminationMode"];
+        if( anyTriggers ) {
+            section("Lights When " + (anySensors ? "Activity Detected" : "Switched On")) {
+                getIlluminationConfig("triggered", false);
+                input "otherIlluminationSwitches", "capability.switch",
+                    title: "Other switches to turn on", multiple: true
+            }
         }
-        section("Lights When Idle") {
-            getIlluminationConfig("untriggered", true);
+        else if( untriggeredMode == null || untriggeredMode == OFF ) {
+            app.updateSetting("untriggeredIlluminationMode",
+                state.deviceIndices.collect{settings["device${it}"]}*.
+                    hasCapability("ColorTemperature").any{ a -> a } ?
+                    CT : RGB);
+        }
+
+        section("Lights " + (anyTriggers ? "When Idle" : "During Illumination Period")) {
+            getIlluminationConfig("untriggered", anyTriggers);
         }
     }
 }
