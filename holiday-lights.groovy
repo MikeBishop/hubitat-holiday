@@ -841,7 +841,7 @@ private unscheduleLightUpdate() {
 }
 
 private beginIlluminationPeriod(event = null) {
-    if( illuminationSwitch && event?.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
+    if( illuminationSwitch?.getDeviceNetworkId() != null && event?.device?.getDeviceNetworkId() == illuminationSwitch?.getDeviceNetworkId() ) {
         if( !state.illuminationMode ) {
             state.lockIllumination = true;
         }
@@ -889,12 +889,16 @@ private endIlluminationPeriod() {
 private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = true;
+
+    // Turn on the illumination switch, but stop listening to on
+    unsubscribe(illuminationSwitch, "switch.on");
     illuminationSwitch?.on();
+    subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
+
     applyIlluminationSettings("triggered");
     otherIlluminationSwitches*.on();
 
     manageTriggerSubscriptions(false, true, "checkIlluminationOff");
-    subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
     unschedule("turnOffIllumination");
     unscheduleLightUpdate();
 }
@@ -1026,7 +1030,11 @@ private turnOffIllumination(event = null) {
     }
     debug("Illumination not triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     state.illuminationMode = false;
+
     unschedule("turnOffIllumination");
+    unsubscribe(illuminationSwitch, "switch.off");
+    subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
+
     manageTriggerSubscriptions(!duringIlluminationPeriod(), true);
     determineNextLightMode();
 }
