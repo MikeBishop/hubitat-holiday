@@ -763,18 +763,18 @@ void beginStateMachine() {
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
-    if( illuminationSwitch ) {
+    if( illuminationSwitch?.currentValue("switch") == "off" ) {
         subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
+        state.lockIllumination = false;
     }
+    else {
+        subscribe(illuminationSwitch, "switch.off", "turnOffIllumination");
+        // Leave lockIllumination however it already is.
+    }
+
     if( duringIlluminationPeriod() ) {
         manageTriggerSubscriptions(true, false, "triggerIllumination");
-        if( state.lockIllumination && illuminationSwitch?.currentValue("switch") == "on" ) {
-            state.illuminationMode = true;
-        }
-        else {
-            state.lockIllumination = false;
-            state.illuminationMode = anyIlluminationTriggers();
-        }
+        state.illuminationMode = anyIlluminationTriggers();
     }
     if( duringHolidayPeriod() ) {
         def possibleHoliday = getCurrentOrNextHoliday();
@@ -880,8 +880,7 @@ private beginIlluminationPeriod(event = null) {
     // Subscribe to the triggers
     manageTriggerSubscriptions(true, false, "triggerIllumination");
 
-    state.illuminationMode = illuminationSwitch?.currentValue("switch") == "on" ||
-        anyIlluminationTriggers();
+    state.illuminationMode = anyIlluminationTriggers();
     determineNextLightMode();
 }
 
@@ -902,7 +901,7 @@ private anyIlluminationTriggers() {
 }
 
 private endIlluminationPeriod() {
-    if( !duringIlluminationPeriod() && !state.lockIllumination ) {
+    if( !duringIlluminationPeriod() ) {
         debug("End illumination period");
         turnOffIllumination();
     }
@@ -1270,7 +1269,7 @@ private Boolean duringHolidayPeriod() {
 }
 
 private Boolean duringIlluminationPeriod() {
-    return duringPeriod("illumination");
+    return duringPeriod("illumination") || state.lockIllumination;
 }
 
 private Boolean duringPeriod(prefix) {
