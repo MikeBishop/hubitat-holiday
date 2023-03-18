@@ -260,14 +260,18 @@ def doLightUpdate(devices, colorIndices, prefix = "") {
     );
 
     // Apply the colors to the devices.
-    def delays = generateDelays(prefix, devices.size());
+    def delays = colorIndices.size() > 1 ?
+                    generateDelays(prefix, devices.size()) :
+                    (0..<devices.size()).collect{ 0 };
     [
         devices,
         colors,
         delays
     ].transpose().
       collectMany{
-        def innerDelays = generateDelays(prefix, it[0].size());
+        def innerDelays = colorIndices.size() > 1 ?
+                            generateDelays(prefix, it[0].size()) :
+                            (0..<it[0].size()).collect{ 0 };
         [
             it[0],
             innerDelays
