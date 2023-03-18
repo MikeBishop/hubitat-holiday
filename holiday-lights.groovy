@@ -814,12 +814,17 @@ private testHoliday(index) {
 
 private onModeChange(evt) {
     debug("Mode changed to ${location.getMode().toString()}");
+    if( duringHolidayPeriod() ) {
+        beginHolidayPeriod();
+    }
+    else {
+        endHolidayPeriod();
+    }
+
     if( duringIlluminationPeriod() ) {
         beginIlluminationPeriod();
     }
     else {
-        // End Illumination will check for active holiday; no need to
-        // handle that case explicitly.
         endIlluminationPeriod();
     }
 }
