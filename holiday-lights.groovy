@@ -795,7 +795,18 @@ void beginStateMachine() {
         subscribe(location, "mode", "onModeChange");
     }
 
+    // Listen for hub reboots.
+    subscribe(location, "systemStart", "hubRestartHandler")
+
     // Figure out where we go from here.
+    determineNextLightMode();
+}
+
+private hubRestartHandler(evt) {
+    // Hub has rebooted -- we may have missed sunrise/sunset events
+    scheduleSunriseAndSunset();
+
+    // Make sure we're in the correct state for any time we've missed
     determineNextLightMode();
 }
 
