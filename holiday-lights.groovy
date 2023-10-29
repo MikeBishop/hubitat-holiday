@@ -78,6 +78,10 @@ Map deviceSelection() {
         section("Devices for Holiday Display") {
             deviceSelector();
         }
+        section("Advanced") {
+            input "suspendSwitch", "capability.switch",
+                title: "Switch to pause all instructions to lights"
+        }
         debug("Finished with deviceSelection");
     }
 }
@@ -761,6 +765,8 @@ void beginStateMachine() {
     state.currentHoliday = null;
     state.sequentialIndex = null;
 
+    subscribe(suspendSwitch, "switch", "determineNextLightMode");
+
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
     if( illuminationSwitch?.currentValue("switch") == "off" ) {
@@ -932,11 +938,18 @@ private triggerIllumination(event = null) {
     unscheduleLightUpdate();
 }
 
-private determineNextLightMode() {
+private determineNextLightMode(event = null) {
     updateSettings();
     def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
     def isIllumination = duringIlluminationPeriod();
     def isTriggered = state.illuminationMode;
+
+    if( suspendSwitch?.currentValue("switch") == "on" ) {
+        // Stop doing anything
+        debug("Suspend switch active; doing nothing until it turns off.");
+        unscheduleLightUpdate();
+        return;
+    }
 
     debug("Determine next light mode: holiday=${isHoliday}, illumination=${isIllumination}, triggered=${isTriggered}");
     if( isIllumination && isTriggered ) {
