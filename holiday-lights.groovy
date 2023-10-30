@@ -1251,10 +1251,25 @@ private startFixedSchedules() {
 
 // #region Time Helper Functions
 
+private getMaxTimePeriod(prefix, startStop) {
+    def modesActive = (settings["${prefix}Modes"]?.size() ?: 0) > 0;
+    def time = getLocalTime("${prefix}${startStop}");
+    if( time && !modesActive ) {
+        return time;
+    }
+    else {
+        return startStop == "Start" ? LocalTime.MIDNIGHT : LocalTime.MAX;
+    }
+}
+
 private isDuringHoliday(currentHoliday) {
     def dates = getHolidayDates(currentHoliday);
-    def startTime = LocalDateTime.of(dates[0], getLocalTime("holidayStart") ?: LocalTime.MIDNIGHT);
-    def endTime = LocalDateTime.of(dates[1], getLocalTime("holidayStop") ?: LocalTime.MAX);
+    def startTime = LocalDateTime.of(dates[0],
+            getMaxTimePeriod("holiday", "Start")
+    );
+    def endTime = LocalDateTime.of(dates[1],
+            getMaxTimePeriod("holiday", "Stop")
+    );
     def now = LocalDateTime.now();
 
     return now.isAfter(startTime) && now.isBefore(endTime);
