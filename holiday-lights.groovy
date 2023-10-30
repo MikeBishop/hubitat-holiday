@@ -753,7 +753,7 @@ void updateSettings() {
 
 // #region Event Handlers
 
-void beginStateMachine() {
+void beginStateMachine(event = null) {
     debug("Begin state machine");
     unsubscribe();
     unschedule();
@@ -796,17 +796,9 @@ void beginStateMachine() {
     }
 
     // Listen for hub reboots.
-    subscribe(location, "systemStart", "hubRestartHandler")
+    subscribe(location, "systemStart", "beginStateMachine");
 
     // Figure out where we go from here.
-    determineNextLightMode();
-}
-
-private hubRestartHandler(evt) {
-    // Hub has rebooted -- we may have missed sunrise/sunset events
-    scheduleSunriseAndSunset();
-
-    // Make sure we're in the correct state for any time we've missed
     determineNextLightMode();
 }
 
@@ -1209,12 +1201,12 @@ private scheduleSunriseAndSunset(event = null) {
     else {
         // No event; do everything.
         sunrise += getLocationEventsSince("sunriseTime", now - 2, [max: 2]).
-            collect { toDateTime(it?.value) };
+            collect { toDateTime(it?.value) } ?: location.sunrise;
 
         sunset += getLocationEventsSince("sunsetTime", now - 2, [max: 2]).
-            collect { toDateTime(it?.value) };
+            collect { toDateTime(it?.value) } ?: location.sunset;
 
-        debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location events");
+        debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location data");
     }
     // Sunrise/sunset just changed, so schedule the upcoming events...
     PREFIX_AND_HANDLERS.each {
@@ -1231,31 +1223,17 @@ private scheduleSunriseAndSunset(event = null) {
             }
 
             if( !foundOne ) {
-                // No events found were in the future; try the location property
-                foundOne = scheduleHandler(
-                    targetTime == SUNRISE ? location.sunrise : location.sunset,
-                    prefix, targetTime, offset, handler
-                );
-
-                if( !foundOne ) {
-                    // Location event is also in the past -- reattempt after
-                    // midnight
-                    schedule("10 0 0 ? * * *", "recoverSunriseSunset",
-                        [ data: [target: targetTime]]
-                    );
-                    warn("Unable to schedule ${prefix} event; waiting until midnight!");
-                }
+                // All available times are in the past -- reattempt after
+                // midnight
+                schedule("10 0 0 ? * * *", "recoverSunriseSunset");
+                warn("Unable to schedule ${prefix} event; trying again after midnight!");
             }
         }
     }
 }
 
-private void recoverSunriseSunset(data) {
-    def target = data["target"];
-    scheduleSunriseAndSunset([
-        name: target == SUNRISE ? "sunriseTime" : "sunsetTime",
-        value: target == SUNRISE ? location.sunrise : location.sunset
-    ]);
+private void recoverSunriseSunset() {
+    scheduleSunriseAndSunset();
     determineNextLightMode();
 }
 
