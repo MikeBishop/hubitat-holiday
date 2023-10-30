@@ -955,6 +955,7 @@ private determineNextLightMode() {
                 def handlerName = "conditionalLightUpdate";
                 scheduleHandler(handlerName, frequency,
                     settings["holiday${currentHoliday}Display"] != STATIC &&
+                        state.colorIndices["${state.currentHoliday}"].size() > 1 &&
                         !state.test
                 );
                 switchesForHoliday*.on();
