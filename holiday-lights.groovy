@@ -794,6 +794,9 @@ void beginStateMachine() {
     if( illuminationModes || holidayModes ) {
         subscribe(location, "mode", "onModeChange");
     }
+    if( holidayModes ) {
+        schedule("15 0 0 * * ?", "determineNextLightMode");
+    }
 
     // Figure out where we go from here.
     determineNextLightMode();
