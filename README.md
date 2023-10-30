@@ -29,3 +29,4 @@ devices, you have full control of when this color palette starts and stops.
 * [12/14/2022]  HL: Permit setting behavior when illumination not triggered
 * [12/16/2022]  Added check for random producing identical output
 * [12/18/2022]  Option for staggering light updates
+* [10/30/2022]  Better handling of holiday modes and hub outages
