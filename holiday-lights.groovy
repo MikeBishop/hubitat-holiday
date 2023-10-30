@@ -1,6 +1,6 @@
 /*
     Holiday Lighting Manager
-    Copyright 2022 Mike Bishop,  All Rights Reserved
+    Copyright 2022-2023 Mike Bishop,  All Rights Reserved
 */
 import groovy.transform.Field
 import java.util.GregorianCalendar;
@@ -268,7 +268,7 @@ def pageEditHoliday(params) {
     }
     else {
         i = state.editingHolidayIndex
-        log.warn "Unexpected contents of params: ${params}"
+        warn("Unexpected contents of params: ${params}");
     }
 
     if( i == state.nextHolidayIndex && holidayIsValid(i) ) {
@@ -338,7 +338,7 @@ def pageColorSelect(params) {
     }
     else {
         i = state.editingHolidayIndex
-        log.warn "Unexpected contents of params: ${params}"
+        warn("Unexpected contents of params: ${params}");
     }
 
     def name = settings["holiday${i}Name"] ?: "New Holiday"
@@ -560,11 +560,11 @@ private holidayDate(int i, String dateType, int year) {
                     result = roshHashanahForYear(year);
                     break;
                 default:
-                    log.warn "Unknown special ${special}"
+                    warn("Unknown special ${special}");
             }
             break;
         default:
-            log.warn "Invalid date format ${type} in holiday ${name}!"
+            warn("Invalid date format ${type} in holiday ${name}!");
             return null;
     }
 
@@ -578,7 +578,7 @@ private sortHolidays() {
     def originalList = state.holidayIndices
     debug("Sorting holidays: ${originalList.inspect()}....")
     def invalid = originalList.findAll{!holidayIsValid(it)};
-    invalid.each{ log.warn "Invalid holiday ${it}"; DeleteHoliday(it); }
+    invalid.each{ warn("Invalid holiday ${it}"); DeleteHoliday(it); }
     def sortedList = originalList.minus(invalid).collect{
             [it, holidayDate(it, "Start", thisYear), holidayDate(it, "End", thisYear)]
         }.sort{ a,b ->
@@ -753,7 +753,7 @@ void updateSettings() {
 
 // #region Event Handlers
 
-void beginStateMachine() {
+void beginStateMachine(event = null) {
     debug("Begin state machine");
     unsubscribe();
     unschedule();
@@ -797,6 +797,9 @@ void beginStateMachine() {
     if( holidayModes ) {
         schedule("15 0 0 * * ?", "determineNextLightMode");
     }
+
+    // Listen for hub reboots.
+    subscribe(location, "systemStart", "beginStateMachine");
 
     // Figure out where we go from here.
     determineNextLightMode();
@@ -939,7 +942,7 @@ private determineNextLightMode() {
     updateSettings();
     def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
     def isIllumination = duringIlluminationPeriod();
-    def isTriggered = state.illuminationMode;
+    def isTriggered = state.illuminationMode ?: false;
 
     debug("Determine next light mode: holiday=${isHoliday}, illumination=${isIllumination}, triggered=${isTriggered}");
     if( isIllumination && isTriggered ) {
@@ -1202,32 +1205,54 @@ private scheduleSunriseAndSunset(event = null) {
     else {
         // No event; do everything.
         sunrise += getLocationEventsSince("sunriseTime", now - 2, [max: 2]).
-            collect { toDateTime(it?.value) };
+            collect { toDateTime(it?.value) } ?: location.sunrise;
 
         sunset += getLocationEventsSince("sunsetTime", now - 2, [max: 2]).
-            collect { toDateTime(it?.value) };
+            collect { toDateTime(it?.value) } ?: location.sunset;
 
-        debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location events");
+        debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location data");
     }
     // Sunrise/sunset just changed, so schedule the upcoming events...
     PREFIX_AND_HANDLERS.each {
         def prefix = it[0];
         def handler = it[1];
         def targetTime = settings["${prefix}Time"];
+        def foundOne = false;
         if ( [SUNRISE, SUNSET].contains(targetTime) ) {
             def offset = settings["${prefix}TimeOffset"] ?: 0;
             def times = targetTime == SUNRISE ? sunrise : sunset;
 
             times.each {
-                // Apply offset
-                def scheduleFor = Date.from(it.toInstant().plus(Duration.ofMinutes(offset)));
+                foundOne |= scheduleHandler(it, prefix, targetTime, offset, handler);
+            }
 
-                if( scheduleFor.after(now) ) {
-                    debug("Scheduling ${prefix} for ${scheduleFor} (${targetTime} with ${offset} minutes offset)");
-                    runOnce(scheduleFor, handler, [overwrite: false]);
-                }
+            if( !foundOne ) {
+                // All available times are in the past -- reattempt after
+                // midnight
+                schedule("10 0 0 ? * * *", "recoverSunriseSunset");
+                warn("Unable to schedule ${prefix} event; trying again after midnight!");
             }
         }
+    }
+}
+
+private void recoverSunriseSunset() {
+    scheduleSunriseAndSunset();
+    determineNextLightMode();
+}
+
+private Boolean scheduleHandler(time, prefix, targetTime, offset, handler) {
+    // Apply offset
+    def scheduleFor = Date.from(time.toInstant().plus(Duration.ofMinutes(offset)));
+
+    if( scheduleFor.after(new Date()) ) {
+        debug("Scheduling ${prefix} for ${scheduleFor} (${targetTime} with ${offset} minutes offset)");
+        runOnce(scheduleFor, handler, [overwrite: false]);
+        return true;
+    }
+    else {
+        debug("Not scheduling ${prefix} for ${scheduleFor}, which is in the past");
+        return false;
     }
 }
 
