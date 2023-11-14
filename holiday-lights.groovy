@@ -743,12 +743,20 @@ void initialize() {
 }
 
 void updateSettings() {
+    // Upgrade to triggered/untriggered illumination settings
     ["colorTemperature", "level", "illuminationColor"].each {
         if( settings[it] ) {
             app.updateSetting("triggered" + it[0].toUpperCase() + it[1..-1], settings[it]);
             app.removeSetting(it);
         }
     }
+
+    // Migrate from sunriseTime/sunsetTime to midnight schedule
+    unsubscribe(location, "sunriseTime");
+    unsubscribe(location, "sunsetTime");
+    unsubscribe(location, "systemStart");
+    subscribe(location, "systemStart", "recoverSunriseSunset");
+    startFixedSchedules();
 }
 
 // #region Event Handlers
@@ -930,7 +938,6 @@ private triggerIllumination(event = null) {
 }
 
 private determineNextLightMode() {
-    updateSettings();
     def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
     def isIllumination = duringIlluminationPeriod();
     def isTriggered = state.illuminationMode ?: false;
@@ -1184,11 +1191,7 @@ private scheduleSunriseAndSunset(event = null) {
     def now = new Date();
     if( event ) {
         // Patch up legacy install
-        unsubscribe(location, "sunriseTime");
-        unsubscribe(location, "sunsetTime");
-        unsubscribe(location, "systemStart");
-        subscribe(location, "systemStart", "recoverSunriseSunset");
-        startFixedSchedules();
+        updateSettings();
     }
 
     // Schedule for today's events
