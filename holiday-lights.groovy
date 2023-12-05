@@ -771,7 +771,7 @@ void beginStateMachine(event = null) {
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
-    if( illuminationSwitch?.currentValue("switch") == "off" ) {
+    if( !illuminationSwitch || illuminationSwitch.currentValue("switch") == "off" ) {
         subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
         state.lockIllumination = false;
     }
@@ -1226,7 +1226,7 @@ private scheduleSunriseAndSunset(event = null) {
 }
 
 // This runs at midnight and at the end of beginStateMachine()
-private void recoverSunriseSunset() {
+private void recoverSunriseSunset(event = null) {
     scheduleSunriseAndSunset();
     determineNextLightMode();
 }
