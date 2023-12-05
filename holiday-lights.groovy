@@ -950,6 +950,7 @@ private determineNextLightMode() {
     else
     {
         illuminationSwitch?.off();
+        otherIlluminationSwitches*.off();
         if ( isHoliday ) {
             if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
@@ -970,6 +971,7 @@ private determineNextLightMode() {
             }
         }
         else if ( isIllumination ) {
+            switchesForHoliday*.off();
             applyIlluminationSettings("untriggered");
         }
         else {
