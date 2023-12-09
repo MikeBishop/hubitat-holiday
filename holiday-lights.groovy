@@ -747,12 +747,20 @@ void initialize() {
 }
 
 void updateSettings() {
+    // Upgrade to triggered/untriggered illumination settings
     ["colorTemperature", "level", "illuminationColor"].each {
         if( settings[it] ) {
             app.updateSetting("triggered" + it[0].toUpperCase() + it[1..-1], settings[it]);
             app.removeSetting(it);
         }
     }
+
+    // Migrate from sunriseTime/sunsetTime to midnight schedule
+    unsubscribe(location, "sunriseTime");
+    unsubscribe(location, "sunsetTime");
+    unsubscribe(location, "systemStart");
+    subscribe(location, "systemStart", "recoverSunriseSunset");
+    startFixedSchedules();
 }
 
 // #region Event Handlers
@@ -769,7 +777,7 @@ void beginStateMachine(event = null) {
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
-    if( illuminationSwitch?.currentValue("switch") == "off" ) {
+    if( !illuminationSwitch || illuminationSwitch.currentValue("switch") == "off" ) {
         subscribe(illuminationSwitch, "switch.on", "beginIlluminationPeriod");
         state.lockIllumination = false;
     }
@@ -789,26 +797,17 @@ void beginStateMachine(event = null) {
 
     // Create schedules for things that don't change
     startFixedSchedules();
-    // Schedule the next instances for sunrise/sunset values
-    scheduleSunriseAndSunset();
-
-    // ...and listen to the event to schedule future iterations.
-    subscribe(location, "sunriseTime", "scheduleSunriseAndSunset");
-    subscribe(location, "sunsetTime", "scheduleSunriseAndSunset");
 
     // Listen for mode changes.
     if( illuminationModes || holidayModes ) {
         subscribe(location, "mode", "onModeChange");
     }
-    if( holidayModes ) {
-        schedule("15 0 0 * * ?", "determineNextLightMode");
-    }
 
     // Listen for hub reboots.
-    subscribe(location, "systemStart", "beginStateMachine");
+    subscribe(location, "systemStart", "recoverSunriseSunset");
 
     // Figure out where we go from here.
-    determineNextLightMode();
+    recoverSunriseSunset();
 }
 
 private testHoliday(index) {
@@ -971,6 +970,7 @@ private determineNextLightMode(event = null) {
     else
     {
         illuminationSwitch?.off();
+        otherIlluminationSwitches*.off();
         if ( isHoliday ) {
             if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
@@ -991,6 +991,7 @@ private determineNextLightMode(event = null) {
             }
         }
         else if ( isIllumination ) {
+            switchesForHoliday*.off();
             applyIlluminationSettings("untriggered");
         }
         else {
@@ -1209,70 +1210,47 @@ private manageTriggerSubscriptions(active, inactive, handler = null) {
 }
 
 private scheduleSunriseAndSunset(event = null) {
-    def sunrise = [];
-    def sunset = [];
     def now = new Date();
     if( event ) {
-        debug("Event ${event.name} says ${event.value}");
+        // Patch up legacy install
+        updateSettings();
     }
-    if( event?.name == "sunriseTime" ) {
-        sunrise.add(toDateTime(event.value));
-    }
-    else if( event?.name == "sunsetTime" ) {
-        sunset.add(toDateTime(event.value));
-    }
-    else {
-        // No event; do everything.
-        sunrise += getLocationEventsSince("sunriseTime", now - 2, [max: 2]).
-            collect { toDateTime(it?.value) } ?: location.sunrise;
 
-        sunset += getLocationEventsSince("sunsetTime", now - 2, [max: 2]).
-            collect { toDateTime(it?.value) } ?: location.sunset;
+    // Schedule for today's events
+    def sunrise = location.sunrise;
+    def sunset = location.sunset;
 
-        debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location data");
-    }
+    debug("Got sunrise: ${sunrise} and sunset: ${sunset} from location data");
+
     // Sunrise/sunset just changed, so schedule the upcoming events...
     PREFIX_AND_HANDLERS.each {
         def prefix = it[0];
         def handler = it[1];
         def targetTime = settings["${prefix}Time"];
-        def foundOne = false;
         if ( [SUNRISE, SUNSET].contains(targetTime) ) {
             def offset = settings["${prefix}TimeOffset"] ?: 0;
-            def times = targetTime == SUNRISE ? sunrise : sunset;
+            def time = targetTime == SUNRISE ? sunrise : sunset;
 
-            times.each {
-                foundOne |= scheduleHandler(it, prefix, targetTime, offset, handler);
+            // Apply offset
+            def scheduleFor = Date.from(time.toInstant().plus(Duration.ofMinutes(offset)));
+
+            if( scheduleFor.after(now) ) {
+                debug("Scheduling ${prefix} for ${scheduleFor} (${targetTime} with ${offset} minutes offset)");
+                runOnce(scheduleFor, handler);
+                return true;
             }
-
-            if( !foundOne ) {
-                // All available times are in the past -- reattempt after
-                // midnight
-                schedule("10 0 0 ? * * *", "recoverSunriseSunset");
-                warn("Unable to schedule ${prefix} event; trying again after midnight!");
+            else {
+                debug("Not scheduling ${prefix} for ${scheduleFor}, which is in the past");
+                return false;
             }
         }
     }
 }
 
-private void recoverSunriseSunset() {
+// This runs at midnight and at the end of beginStateMachine()
+private void recoverSunriseSunset(event = null) {
     scheduleSunriseAndSunset();
     determineNextLightMode();
-}
-
-private Boolean scheduleHandler(time, prefix, targetTime, offset, handler) {
-    // Apply offset
-    def scheduleFor = Date.from(time.toInstant().plus(Duration.ofMinutes(offset)));
-
-    if( scheduleFor.after(new Date()) ) {
-        debug("Scheduling ${prefix} for ${scheduleFor} (${targetTime} with ${offset} minutes offset)");
-        runOnce(scheduleFor, handler, [overwrite: false]);
-        return true;
-    }
-    else {
-        debug("Not scheduling ${prefix} for ${scheduleFor}, which is in the past");
-        return false;
-    }
 }
 
 @Field static final List PREFIX_AND_HANDLERS = [
@@ -1283,6 +1261,8 @@ private Boolean scheduleHandler(time, prefix, targetTime, offset, handler) {
 ];
 
 private startFixedSchedules() {
+    schedule("15 0 0 * * ?", "recoverSunriseSunset");
+
     PREFIX_AND_HANDLERS.each {
         def prefix = it[0];
         def handler = it[1];
