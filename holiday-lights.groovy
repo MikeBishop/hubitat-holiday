@@ -923,6 +923,12 @@ private endIlluminationPeriod() {
 
 private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
+    if( suspendSwitch?.currentValue("switch") == "on" ) {
+        // Stop doing anything
+        debug("Suspend switch active; ignoring triggers until it turns off.");
+        return;
+    }
+
     state.illuminationMode = true;
 
     // Turn on the illumination switch, but stop listening to on
