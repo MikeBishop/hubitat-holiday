@@ -983,9 +983,9 @@ private determineNextLightMode() {
 private applyIlluminationSettings(String prefix) {
     def mode = settings["${prefix}IlluminationMode"];
     def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    def ctDevices = devices.findAll { it.hasCapability("ColorTemperature")};
+    def ctDevices = devices?.findAll { it.hasCapability("ColorTemperature")} ?: [];
     debug("CT-capable devices: ${ctDevices.inspect()}");
-    def rgbOnlyDevices = devices.minus(ctDevices);
+    def rgbOnlyDevices = devices?.minus(ctDevices) ?: [];
     debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
 
     if( mode == null ) {
