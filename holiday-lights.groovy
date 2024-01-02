@@ -80,11 +80,21 @@ Map deviceSelection() {
         }
         section("Advanced") {
             input "suspendSwitch", "capability.switch",
-                title: "Switch to pause all instructions to lights when on"
+                title: "Switch to pause all instructions to lights"
+            input "suspendSwitchOrientation", "bool",
+                title: "Pause when switch is " +
+                    maybeBold("on", suspendSwitchOrientation == true) + " or " +
+                    maybeBold("off", suspendSwitchOrientation == false),
+                defaultValue: true
             def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
             if( booleanVars.any() ) {
                 input "suspendVar", "enum", options: booleanVars.sort(),
                     title: "Variable to pause all instructions to lights when true"
+                input "suspendVarOrientation", "bool",
+                    title: "Pause when variable is " +
+                        maybeBold("true", suspendSwitchOrientation == true) + " or " +
+                        maybeBold("false", suspendSwitchOrientation == false),
+                    defaultValue: true
             }
         }
         debug("Finished with deviceSelection");
@@ -766,6 +776,10 @@ void updateSettings() {
     unsubscribe(location, "systemStart");
     subscribe(location, "systemStart", "recoverSunriseSunset");
     startFixedSchedules();
+
+    if( suspendSwitch != null && suspendSwitchOrientation == null ) {
+        suspendSwitchOrientation = true;
+    }
 }
 
 // #region Event Handlers
@@ -968,8 +982,8 @@ private triggerIllumination(event = null) {
 }
 
 private Boolean appIsSuspended() {
-    return suspendSwitch?.currentValue("switch") == "on" ||
-        ( suspendVar && getGlobalVar(suspendVar)?.value == true );
+    return suspendSwitch?.currentValue("switch") == (suspendSwitchOrientation ? "on" : "off") ||
+        ( suspendVar && getGlobalVar(suspendVar)?.value == suspendVarOrientation );
 }
 
 private determineNextLightMode(event = null) {
