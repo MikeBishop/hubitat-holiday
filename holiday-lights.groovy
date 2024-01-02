@@ -928,7 +928,7 @@ private endIlluminationPeriod() {
 
 private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
-    if( suspendSwitch?.currentValue("switch") == "on" ) {
+    if( appIsSuspended() ) {
         // Stop doing anything
         debug("Suspend switch active; ignoring triggers until it turns off.");
         return;
@@ -949,13 +949,17 @@ private triggerIllumination(event = null) {
     unscheduleLightUpdate();
 }
 
+private Boolean appIsSuspended() {
+    return suspendSwitch?.currentValue("switch") == "on"
+}
+
 private determineNextLightMode(event = null) {
     updateSettings();
     def isHoliday = state.currentHoliday != null && duringHolidayPeriod();
     def isIllumination = duringIlluminationPeriod();
     def isTriggered = state.illuminationMode ?: false;
 
-    if( suspendSwitch?.currentValue("switch") == "on" ) {
+    if( appIsSuspended() ) {
         // Stop doing anything
         debug("Suspend switch active; doing nothing until it turns off.");
         unscheduleLightUpdate();
