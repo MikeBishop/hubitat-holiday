@@ -1,6 +1,6 @@
 /*
     Holiday Lighting Manager
-    Copyright 2022-2023 Mike Bishop,  All Rights Reserved
+    Copyright 2022-2024 Mike Bishop,  All Rights Reserved
 */
 import groovy.transform.Field
 import java.util.GregorianCalendar;
@@ -80,7 +80,12 @@ Map deviceSelection() {
         }
         section("Advanced") {
             input "suspendSwitch", "capability.switch",
-                title: "Switch to pause all instructions to lights"
+                title: "Switch to pause all instructions to lights when on"
+            def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
+            if( booleanVars.any() ) {
+                input "suspendVar", "enum", options: booleanVars.sort(),
+                    title: "Variable to pause all instructions to lights when true"
+            }
         }
         debug("Finished with deviceSelection");
     }
@@ -769,11 +774,16 @@ void beginStateMachine(event = null) {
     debug("Begin state machine");
     unsubscribe();
     unschedule();
+    removeAllInUseGlobalVar();
     state.test = false;
     state.currentHoliday = null;
     state.sequentialIndex = null;
 
     subscribe(suspendSwitch, "switch", "determineNextLightMode");
+    if( suspendVar != null ) {
+        subscribe(location, "variable:${suspendVar}", "determineNextLightMode");
+        addInUseGlobalVar(suspendVar);
+    }
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
@@ -837,6 +847,14 @@ private onModeChange(evt) {
     }
     else {
         endIlluminationPeriod();
+    }
+}
+
+void renameVariable(String oldName, String newName) {
+    if( suspendVar == oldName ) {
+        app.updateSetting("suspendVar", newName);
+        removeInUseGlobalVar(oldName);
+        addInUseGlobalVar(newName);
     }
 }
 
@@ -930,7 +948,7 @@ private triggerIllumination(event = null) {
     debug("Illumination triggered" + (event ? " after ${event.device} sent ${event.value}" : ""));
     if( appIsSuspended() ) {
         // Stop doing anything
-        debug("Suspend switch active; ignoring triggers until it turns off.");
+        debug("Suspended; ignoring triggers until released.");
         return;
     }
 
@@ -950,7 +968,8 @@ private triggerIllumination(event = null) {
 }
 
 private Boolean appIsSuspended() {
-    return suspendSwitch?.currentValue("switch") == "on"
+    return suspendSwitch?.currentValue("switch") == "on" ||
+        ( suspendVar && getGlobalVar(suspendVar)?.value == true );
 }
 
 private determineNextLightMode(event = null) {
@@ -961,7 +980,7 @@ private determineNextLightMode(event = null) {
 
     if( appIsSuspended() ) {
         // Stop doing anything
-        debug("Suspend switch active; doing nothing until it turns off.");
+        debug("Suspended; ignoring triggers until released.");
         unscheduleLightUpdate();
         return;
     }
@@ -984,7 +1003,7 @@ private determineNextLightMode(event = null) {
                 def handlerName = "conditionalLightUpdate";
                 scheduleHandler(handlerName, frequency,
                     settings["holiday${currentHoliday}Display"] != STATIC &&
-                        state.colorIndices["${state.currentHoliday}"].size() > 1 &&
+                        state.colorIndices["${state.currentHoliday}"]?.size() > 1 &&
                         !state.test
                 );
                 switchesForHoliday*.on();
