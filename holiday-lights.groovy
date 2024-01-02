@@ -81,6 +81,9 @@ Map deviceSelection() {
         section("Advanced") {
             input "suspendSwitch", "capability.switch",
                 title: "Switch to pause all instructions to lights"
+            if( suspendSwitchOrientation == null ) {
+                suspendSwitchOrientation = true;
+            }
             input "suspendSwitchOrientation", "bool",
                 title: "Pause when switch is " +
                     maybeBold("on", suspendSwitchOrientation == true) + " or " +
@@ -88,12 +91,15 @@ Map deviceSelection() {
                 defaultValue: true
             def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
             if( booleanVars.any() ) {
+                if( suspendVarOrientation == null ) {
+                    suspendVarOrientation = true;
+                }
                 input "suspendVar", "enum", options: booleanVars.sort(),
                     title: "Variable to pause all instructions to lights when true"
                 input "suspendVarOrientation", "bool",
                     title: "Pause when variable is " +
-                        maybeBold("true", suspendSwitchOrientation == true) + " or " +
-                        maybeBold("false", suspendSwitchOrientation == false),
+                        maybeBold("true", suspendVarOrientation == true) + " or " +
+                        maybeBold("false", suspendVarOrientation == false),
                     defaultValue: true
             }
         }
