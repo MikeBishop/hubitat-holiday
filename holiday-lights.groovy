@@ -973,6 +973,7 @@ private triggerIllumination(event = null) {
     }
 
     state.illuminationMode = true;
+    state.lightsActive = true;
 
     // Turn on the illumination switch, but stop listening to on
     unsubscribe(illuminationSwitch, "switch.on");
@@ -1027,6 +1028,7 @@ private determineNextLightMode(event = null) {
                         !state.test
                 );
                 switchesForHoliday*.on();
+                state.lightsActive = true;
             }
             else {
                 debug("Holiday is not active");
@@ -1079,6 +1081,7 @@ private applyIlluminationSettings(String prefix) {
             debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
             ctDevices*.setColorTemperature(colorTemperature, level);
             rgbOnlyDevices*.off();
+            state.lightsActive = true;
             break;
         case RGB:
             def colorMap = null;
@@ -1098,9 +1101,10 @@ private applyIlluminationSettings(String prefix) {
             }
             debug("Setting color to ${colorMap.inspect()}");
             devices*.setColor(colorMap);
+            state.lightsActive = true;
             break;
         case OFF:
-            devices*.off();
+            lightsOff();
             break;
         default:
             error("Unknown illumination mode: ${mode}");
@@ -1224,11 +1228,14 @@ private getCurrentOrNextHoliday() {
 }
 
 private lightsOff() {
-    debug("Turning off lights");
-    def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    devices*.off();
-    otherIlluminationSwitches*.off();
-    switchesForHoliday*.off();
+    if( state.lightsActive ) {
+        debug("Turning off lights");
+        def devices = state.deviceIndices.collect{ settings["device${it}"] };
+        devices*.off();
+        otherIlluminationSwitches*.off();
+        switchesForHoliday*.off();
+        state.lightsActive = false;
+    }
 }
 
 private manageTriggerSubscriptions(active, inactive, handler = null) {
