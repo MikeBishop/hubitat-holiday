@@ -810,7 +810,9 @@ void beginStateMachine(event = null) {
         subscribe(location, "variable:${suspendVar}", "determineNextLightMode");
         addInUseGlobalVar(suspendVar);
     }
-    addInUseGlobalVar(holidayVar);
+    if( holidayVar != null ) {
+        addInUseGlobalVar(holidayVar);
+    }
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
