@@ -1013,8 +1013,11 @@ private determineNextLightMode(event = null) {
     }
     else
     {
-        illuminationSwitch?.off();
-        otherIlluminationSwitches*.off();
+        if( illuminationSwitch?.currentValue("switch") == "on" ) {
+            debug("Illumination switch is on; turning off");
+            illuminationSwitch.off();
+        }
+        switchesOff(otherIlluminationSwitches);
         if ( isHoliday ) {
             if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
@@ -1036,7 +1039,7 @@ private determineNextLightMode(event = null) {
             }
         }
         else if ( isIllumination ) {
-            switchesForHoliday*.off();
+            switchesOff(switchesForHoliday);
             applyIlluminationSettings("untriggered");
         }
         else {
@@ -1080,7 +1083,7 @@ private applyIlluminationSettings(String prefix) {
             }
             debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
             ctDevices*.setColorTemperature(colorTemperature, level);
-            rgbOnlyDevices*.off();
+            switchesOff(rgbOnlyDevices);
             state.lightsActive = true;
             break;
         case RGB:
@@ -1231,11 +1234,15 @@ private lightsOff() {
     if( state.lightsActive ) {
         debug("Turning off lights");
         def devices = state.deviceIndices.collect{ settings["device${it}"] };
-        devices*.off();
-        otherIlluminationSwitches*.off();
-        switchesForHoliday*.off();
+        switchesOff(devices);
+        switchesOff(otherIlluminationSwitches);
+        switchesOff(switchesForHoliday);
         state.lightsActive = false;
     }
+}
+
+private switchesOff(switches) {
+    switches.findAll{ it.currentValue("switch") == "on" }*.off();
 }
 
 private manageTriggerSubscriptions(active, inactive, handler = null) {
