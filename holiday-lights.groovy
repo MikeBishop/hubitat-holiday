@@ -134,6 +134,12 @@ Map holidayDefinitions() {
 
             input "frequency", "enum", title: "Update Frequency",
                 options: FREQ_OPTIONS, required: true
+
+            def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
+            if( booleanVars.any() ) {
+                input "holidayVar", "enum", options: booleanVars.sort(),
+                    title: "Variable to indicate active holiday"
+            }
         }
 
         debug("Colors are ${state.colorIndices.inspect()}")
@@ -871,10 +877,12 @@ private onModeChange(evt) {
 }
 
 void renameVariable(String oldName, String newName) {
-    if( suspendVar == oldName ) {
-        app.updateSetting("suspendVar", newName);
-        removeInUseGlobalVar(oldName);
-        addInUseGlobalVar(newName);
+    ["suspendVar", "holidayVar"].each {
+        if( settings[it] == oldName ) {
+            app.updateSetting(it, newName);
+            removeInUseGlobalVar(oldName);
+            addInUseGlobalVar(newName);
+        }
     }
 }
 
@@ -1021,6 +1029,7 @@ private determineNextLightMode(event = null) {
         if ( isHoliday ) {
             if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
+                setGlobalVar(holidayVar, true);
 
                 // We're going to start the display; unless it's static,
                 // schedule the updates.
@@ -1055,6 +1064,7 @@ private applyIlluminationSettings(String prefix) {
     debug("CT-capable devices: ${ctDevices.inspect()}");
     def rgbOnlyDevices = devices?.minus(ctDevices) ?: [];
     debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
+    setGlobalVar(holidayVar, false);
 
     if( mode == null ) {
         if( prefix == "triggered" ) {
@@ -1239,6 +1249,7 @@ private lightsOff() {
         switchesOff(switchesForHoliday);
         state.lightsActive = false;
     }
+    setGlobalVar(holidayVar, false);
 }
 
 private switchesOff(switches) {
