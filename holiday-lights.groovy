@@ -134,6 +134,12 @@ Map holidayDefinitions() {
 
             input "frequency", "enum", title: "Update Frequency",
                 options: FREQ_OPTIONS, required: true
+
+            def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
+            if( booleanVars.any() ) {
+                input "holidayVar", "enum", options: booleanVars.sort(),
+                    title: "Variable to indicate active holiday"
+            }
         }
 
         debug("Colors are ${state.colorIndices.inspect()}")
@@ -804,6 +810,9 @@ void beginStateMachine(event = null) {
         subscribe(location, "variable:${suspendVar}", "determineNextLightMode");
         addInUseGlobalVar(suspendVar);
     }
+    if( holidayVar != null ) {
+        addInUseGlobalVar(holidayVar);
+    }
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
@@ -871,10 +880,12 @@ private onModeChange(evt) {
 }
 
 void renameVariable(String oldName, String newName) {
-    if( suspendVar == oldName ) {
-        app.updateSetting("suspendVar", newName);
-        removeInUseGlobalVar(oldName);
-        addInUseGlobalVar(newName);
+    ["suspendVar", "holidayVar"].each {
+        if( settings[it] == oldName ) {
+            app.updateSetting(it, newName);
+            removeInUseGlobalVar(oldName);
+            addInUseGlobalVar(newName);
+        }
     }
 }
 
@@ -973,6 +984,7 @@ private triggerIllumination(event = null) {
     }
 
     state.illuminationMode = true;
+    state.lightsActive = true;
 
     // Turn on the illumination switch, but stop listening to on
     unsubscribe(illuminationSwitch, "switch.on");
@@ -1012,11 +1024,15 @@ private determineNextLightMode(event = null) {
     }
     else
     {
-        illuminationSwitch?.off();
-        otherIlluminationSwitches*.off();
+        if( illuminationSwitch?.currentValue("switch") == "on" ) {
+            debug("Illumination switch is on; turning off");
+            illuminationSwitch.off();
+        }
+        switchesOff(otherIlluminationSwitches);
         if ( isHoliday ) {
             if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
+                setGlobalVar(holidayVar, true);
 
                 // We're going to start the display; unless it's static,
                 // schedule the updates.
@@ -1027,6 +1043,7 @@ private determineNextLightMode(event = null) {
                         !state.test
                 );
                 switchesForHoliday*.on();
+                state.lightsActive = true;
             }
             else {
                 debug("Holiday is not active");
@@ -1034,7 +1051,7 @@ private determineNextLightMode(event = null) {
             }
         }
         else if ( isIllumination ) {
-            switchesForHoliday*.off();
+            switchesOff(switchesForHoliday);
             applyIlluminationSettings("untriggered");
         }
         else {
@@ -1050,6 +1067,7 @@ private applyIlluminationSettings(String prefix) {
     debug("CT-capable devices: ${ctDevices.inspect()}");
     def rgbOnlyDevices = devices?.minus(ctDevices) ?: [];
     debug("RGB-only devices: ${rgbOnlyDevices.inspect()}");
+    setGlobalVar(holidayVar, false);
 
     if( mode == null ) {
         if( prefix == "triggered" ) {
@@ -1078,7 +1096,8 @@ private applyIlluminationSettings(String prefix) {
             }
             debug("Setting color temperature to ${colorTemperature}K and level to ${level}%");
             ctDevices*.setColorTemperature(colorTemperature, level);
-            rgbOnlyDevices*.off();
+            switchesOff(rgbOnlyDevices);
+            state.lightsActive = true;
             break;
         case RGB:
             def colorMap = null;
@@ -1098,9 +1117,10 @@ private applyIlluminationSettings(String prefix) {
             }
             debug("Setting color to ${colorMap.inspect()}");
             devices*.setColor(colorMap);
+            state.lightsActive = true;
             break;
         case OFF:
-            devices*.off();
+            lightsOff();
             break;
         default:
             error("Unknown illumination mode: ${mode}");
@@ -1224,11 +1244,19 @@ private getCurrentOrNextHoliday() {
 }
 
 private lightsOff() {
-    debug("Turning off lights");
-    def devices = state.deviceIndices.collect{ settings["device${it}"] };
-    devices*.off();
-    otherIlluminationSwitches*.off();
-    switchesForHoliday*.off();
+    if( state.lightsActive ) {
+        debug("Turning off lights");
+        def devices = state.deviceIndices.collect{ settings["device${it}"] };
+        switchesOff(devices);
+        switchesOff(otherIlluminationSwitches);
+        switchesOff(switchesForHoliday);
+        state.lightsActive = false;
+    }
+    setGlobalVar(holidayVar, false);
+}
+
+private switchesOff(switches) {
+    switches.findAll{ it.currentValue("switch") == "on" }*.off();
 }
 
 private manageTriggerSubscriptions(active, inactive, handler = null) {
