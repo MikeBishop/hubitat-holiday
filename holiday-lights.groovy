@@ -1675,7 +1675,7 @@ private static LocalDate passoverForYear(int Y) {
     DH = (int) Math.floor(DMH - 62 - 30.6*MH) + 1;
     MH += 2;
 
-    return LocalDate.of(Y, MH, DH);
+    return LocalDate.of(Y, MH, 1).plusDays(DH - 1);
 }
 
 private static LocalDate roshHashanahForYear(int year) {
@@ -1689,7 +1689,7 @@ private static LocalDate roshHashanahForYear(int year) {
     int N = (int) Math.floor(nPlusFrac);
     double fraction = nPlusFrac - N;
 
-    LocalDate tentative = LocalDate.of(year, Month.SEPTEMBER, N);
+    LocalDate tentative = LocalDate.of(year, Month.SEPTEMBER, 1).plusDays(N - 1);
 
     switch(tentative.getDayOfWeek()) {
         case DayOfWeek.SUNDAY:
