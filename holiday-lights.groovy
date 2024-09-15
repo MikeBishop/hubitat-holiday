@@ -25,6 +25,7 @@ preferences {
     page(name: "pageImport")
     page(name: "pageColorSelect")
     page(name: "illuminationConfig")
+    page(name: "advancedOptions")
 }
 
 Map mainPage() {
@@ -64,6 +65,12 @@ Map mainPage() {
                 title: "Holiday Displays",
                 description: "What colors on what special days?"
             )
+            href(
+                name: "advancedHref",
+                page: "advancedOptions",
+                title: "Advanced Options",
+                description: "Integrate with other apps and devices"
+            )
 
             input "debugSpew", "bool", title: "Log debug messages?",
                 submitOnChange: true, defaultValue: false;
@@ -78,7 +85,17 @@ Map deviceSelection() {
         section("Devices for Holiday Display") {
             deviceSelector();
         }
-        section("Advanced") {
+        debug("Finished with deviceSelection");
+    }
+}
+
+Map advancedOptions() {
+    debug("Rendering advancedOptions");
+    dynamicPage(name: "advancedOptions", title: "Advanced Options") {
+        def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
+        def stringVars = getGlobalVarsByType("string").collect{ it.key }
+
+        section("Suspend Holiday Lighting") {
             input "suspendSwitch", "capability.switch",
                 title: "Switch to pause all instructions to lights"
             if( suspendSwitchOrientation == null ) {
@@ -89,7 +106,6 @@ Map deviceSelection() {
                     maybeBold("on", suspendSwitchOrientation == true) + " or " +
                     maybeBold("off", suspendSwitchOrientation == false),
                 defaultValue: true
-            def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
             if( booleanVars.any() ) {
                 if( suspendVarOrientation == null ) {
                     suspendVarOrientation = true;
@@ -103,7 +119,19 @@ Map deviceSelection() {
                     defaultValue: true
             }
         }
-        debug("Finished with deviceSelection");
+        section("Notify other apps of Holiday Lighting actions") {
+            if( stringVars.any() ) {
+                input "holidayNameVar", "enum", options: stringVars.sort(),
+                    title: "Variable to indicate current holiday"
+            }
+            if( booleanVars.any() ) {
+                input "holidayVar", "enum", options: booleanVars.sort(),
+                    title: "Variable to indicate holiday lights are being shown"
+                input "illuminationTriggeredVar", "enum", options: booleanVars.sort(),
+                    title: "Variable to indicate illumination was triggered"
+            }
+        }
+        debug("Finished with advancedOptions");
     }
 }
 
@@ -134,12 +162,6 @@ Map holidayDefinitions() {
 
             input "frequency", "enum", title: "Update Frequency",
                 options: FREQ_OPTIONS, required: true
-
-            def booleanVars = getGlobalVarsByType("boolean").collect{ it.key }
-            if( booleanVars.any() ) {
-                input "holidayVar", "enum", options: booleanVars.sort(),
-                    title: "Variable to indicate active holiday"
-            }
         }
 
         debug("Colors are ${state.colorIndices.inspect()}")
@@ -813,6 +835,12 @@ void beginStateMachine(event = null) {
     if( holidayVar != null ) {
         addInUseGlobalVar(holidayVar);
     }
+    if( holidayActiveVar != null ) {
+        addInUseGlobalVar(holidayActiveVar);
+    }
+    if( illuminationTriggeredVar != null ) {
+        addInUseGlobalVar(illuminationTriggeredVar);
+    }
 
     // Basic subscriptions -- subscribe to switch changes and schedule begin/end
     // of other periods.
@@ -880,7 +908,12 @@ private onModeChange(evt) {
 }
 
 void renameVariable(String oldName, String newName) {
-    ["suspendVar", "holidayVar"].each {
+    [
+        "suspendVar",
+        "holidayVar",
+        "holidayNameVar",
+        "illuminationTriggeredVar"
+    ].each {
         if( settings[it] == oldName ) {
             app.updateSetting(it, newName);
             removeInUseGlobalVar(oldName);
@@ -928,6 +961,11 @@ private unscheduleLightUpdate() {
     unschedule("conditionalLightUpdate");
     unschedule("runHandler");
     unschedule("setColor");
+}
+
+private setBooleanVarsForState(holidayActive, illuminationTriggered) {
+    setGlobalVar(holidayVar, holidayActive);
+    setGlobalVar(illuminationTriggeredVar, illuminationTriggered);
 }
 
 private beginIlluminationPeriod(event = null) {
@@ -985,6 +1023,7 @@ private triggerIllumination(event = null) {
 
     state.illuminationMode = true;
     state.lightsActive = true;
+    setBooleanVarsForState(false, true);
 
     // Turn on the illumination switch, but stop listening to on
     unsubscribe(illuminationSwitch, "switch.on");
@@ -1032,7 +1071,7 @@ private determineNextLightMode(event = null) {
         if ( isHoliday ) {
             if( state.test || isDuringHoliday(state.currentHoliday) ) {
                 debug("Holiday is active");
-                setGlobalVar(holidayVar, true);
+                setBooleanVarsForState(true, false);
 
                 // We're going to start the display; unless it's static,
                 // schedule the updates.
@@ -1052,9 +1091,11 @@ private determineNextLightMode(event = null) {
         }
         else if ( isIllumination ) {
             switchesOff(switchesForHoliday);
+            setBooleanVarsForState(false, false);
             applyIlluminationSettings("untriggered");
         }
         else {
+            setBooleanVarsForState(false, false);
             lightsOff();
         }
     }
@@ -1220,26 +1261,27 @@ private getCurrentOrNextHoliday() {
         dateIsBetweenInclusive(today, startDate, endDate);
     };
     debug("Current holidays: ${currentHolidays}");
-    if( currentHolidays.size() > 1 ) {
+    if( currentHolidays.size() ) {
         def result = currentHolidays.collect{
             [it[0], Duration.between(it[1].atStartOfDay(), it[2].atStartOfDay())]
         }.sort{ a,b -> a[1] <=> b[1] }.first();
         debug("Selected holiday: ${result}");
-        return result[0];
-    }
-    else if ( currentHolidays.size() == 1 ) {
-        debug("Selected holiday: ${currentHolidays[0]}");
-        return currentHolidays.first()[0];
-    }
-    else if ( futureHolidays.size() ) {
-        def result = futureHolidays.
-            sort{ a,b -> a[1] <=> b[1] ?: a[2] <=> b[2] }.first();
-        debug("Next holiday: ${result}");
+        setGlobalVar(holidayNameVar, settings["holiday${result[0]}Name"]);
         return result[0];
     }
     else {
-        debug("No holidays");
-        return null;
+        setGlobalVar(holidayNameVar, "");
+
+        if ( futureHolidays.size() ) {
+            def result = futureHolidays.
+                sort{ a,b -> a[1] <=> b[1] ?: a[2] <=> b[2] }.first();
+            debug("Next holiday: ${result}");
+            return result[0];
+        }
+        else {
+            debug("No holidays");
+            return null;
+        }
     }
 }
 
@@ -1321,6 +1363,7 @@ private scheduleSunriseAndSunset(event = null) {
 // This runs at midnight and at the end of beginStateMachine()
 private void recoverSunriseSunset(event = null) {
     scheduleSunriseAndSunset();
+    getCurrentOrNextHoliday();
     determineNextLightMode();
 }
 
