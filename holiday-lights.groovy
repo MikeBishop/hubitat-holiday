@@ -105,7 +105,7 @@ Map advancedOptions() {
                 title: "Pause when switch is " +
                     maybeBold("on", suspendSwitchOrientation == true) + " or " +
                     maybeBold("off", suspendSwitchOrientation == false),
-                defaultValue: true
+                defaultValue: true, submitOnChange: true
             if( booleanVars.any() ) {
                 if( suspendVarOrientation == null ) {
                     suspendVarOrientation = true;
@@ -116,7 +116,7 @@ Map advancedOptions() {
                     title: "Pause when variable is " +
                         maybeBold("true", suspendVarOrientation == true) + " or " +
                         maybeBold("false", suspendVarOrientation == false),
-                    defaultValue: true
+                    defaultValue: true, submitOnChange: true
             }
         }
         section("Notify other apps of Holiday Lighting actions") {
