@@ -1109,7 +1109,7 @@ private determineNextLightMode(event = null) {
 
 private otherSwitches(String prefix = "") {
     def inactive_prefixes = ["triggered", "untriggered", "holiday"];
-    prefixes.remove(prefix);
+    inactive_prefixes.remove(prefix);
 
     def switches_off = inactive_prefixes.collect{ settings["${it}OtherSwitches"] ?: [] }.flatten();
     def switches_on = settings["${prefix}OtherSwitches"] ?: [];
