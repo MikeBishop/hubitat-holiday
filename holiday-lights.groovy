@@ -175,14 +175,14 @@ Map holidayDefinitions() {
                     settings["holiday${i}Color${it}"] != null
                 } ) {
                     colorDescription = colorsForThisHoliday.collect {
-                        def colorMap;
+                        def colorInRGB = "#000000";
                         try {
-                            colorMap = evaluate(settings["holiday${i}Color${it}"].toString());
+                            def colorMap = evaluate(settings["holiday${i}Color${it}"].toString());
+                            colorInRGB = HSVtoRGB(colorMap)
                         }
                         catch (Exception ex) {
                             warn("Rehydration failed with ${ex}")
                         }
-                        def colorInRGB = HSVtoRGB(colorMap) ?: "#000000";
                         "<div style=\"background-color: ${colorInRGB}; padding: 10px; border: 1px solid black; display: inline-block\">&nbsp;</div>"
                     }.join()
                 }
