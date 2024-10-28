@@ -1111,9 +1111,12 @@ private otherSwitches(String prefix = "") {
     def inactive_prefixes = ["triggered", "untriggered", "holiday"];
     prefixes.remove(prefix);
 
-    switchesOff(inactive_prefixes.collect{ settings["${it}OtherSwitches"] ?: [] }.flatten());
+    def switches_off = inactive_prefixes.collect{ settings["${it}OtherSwitches"] ?: [] }.flatten();
+    def switches_on = settings["${prefix}OtherSwitches"] ?: [];
+    switches_off.removeAll(switches_on);
 
-    (settings["${prefix}OtherSwitches"] ?: [])*.on();
+    switchesOff(switches_off);
+    switches_on*.on();
 }
 
 private applyIlluminationSettings(String prefix) {
