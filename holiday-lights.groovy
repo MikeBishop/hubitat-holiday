@@ -722,20 +722,20 @@ private StringifyDate(int index) {
     dates.collect {
         try {
             def result = ""
+            def offset = settings["holiday${index}${it}Offset"]
+            if( offset && Integer.parseInt(offset.toString()) != 0 ) {
+                if( offset instanceof String ) {
+                    offset = Integer.parseInt(offset);
+                }
+                def absOffset = Math.abs(offset)
+                result += "${absOffset} day${absOffset > 1 ? "s" : ""} ${offset > 0 ? "after" : "before"} "
+            }
+
             if( settings["holiday${index}${it}Type"] != SPECIAL ) {
                 formatter = DateTimeFormatter.ofPattern("MMMM");
                 def monthEnum = unarray(settings["holiday${index}${it}Month"]);
                 def month = Month.valueOf(monthEnum);
                 def monthString = LocalDate.now().with(month).format(formatter);
-
-                def offset = settings["holiday${index}${it}Offset"]
-                if( offset && Integer.parseInt(offset.toString()) != 0 ) {
-                    if( offset instanceof String ) {
-                        offset = Integer.parseInt(offset);
-                    }
-                    def absOffset = Math.abs(offset)
-                    result += "${absOffset} day${absOffset > 1 ? "s" : ""} ${offset > 0 ? "after" : "before"} "
-                }
 
                 if( settings["holiday${index}${it}Type"] == ORDINAL ) {
                     def ordinal = unarray(settings["holiday${index}${it}Ordinal"]);
@@ -745,16 +745,16 @@ private StringifyDate(int index) {
                     def day = DayOfWeek.valueOf(dayEnum);
                     result += LocalDate.now().with(day).format(formatter) + " of "
                     result += monthString;
-                    return result;
                 }
                 else {
                     //Fixed
-                    return "${monthString} ${settings["holiday${index}${it}Day"]}"
+                    result += "${monthString} ${settings["holiday${index}${it}Day"]}"
                 }
             }
             else {
-                return SPECIALS[settings["holiday${index}${it}Special"]]
+                 result += SPECIALS[settings["holiday${index}${it}Special"]]
             }
+            return result
         }
         catch(Exception ex) {
             error(ex);
