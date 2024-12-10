@@ -989,6 +989,7 @@ private beginIlluminationPeriod(event = null) {
 
 private anyIlluminationTriggers() {
     if( state.lockIllumination ) {
+        debug "Illumination staying on due to control switch";
         return true;
     }
 
