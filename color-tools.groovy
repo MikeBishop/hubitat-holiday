@@ -195,7 +195,7 @@ private getColors(colorIndices, desiredLength, prefix = "") {
 
     def colors = colorIndices.collect{
         try {
-            evaluate(settings["${prefix}Color${it}"])
+            parseColorMap(settings["${prefix}Color${it}"])
         }
         catch(Exception ex) {
             error(ex);
@@ -394,4 +394,25 @@ void error(Exception ex) {
 
 void error(String msg) {
     log.error msg
+}
+
+
+// Replaces evaluate(), which newer Hubitat firmware blocks.
+// Parses strings like "[hue: 82, saturation: 100, level: 100]".
+private Map parseColorMap(value) {
+    if (value == null) return null
+    if (value instanceof Map) return value
+    String text = value.toString().replace("[", "").replace("]", "")
+    Map result = [:]
+    for (String part in text.split(",")) {
+        String[] kv = part.split(":")
+        if (kv.length == 2) {
+            String k = kv[0].trim()
+            String v = kv[1].trim()
+            if (v.isNumber()) {
+                result[k] = v.contains(".") ? v.toBigDecimal() : v.toInteger()
+            }
+        }
+    }
+    return result.size() > 0 ? result : null
 }

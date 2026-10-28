@@ -177,7 +177,7 @@ Map holidayDefinitions() {
                     colorDescription = colorsForThisHoliday.collect {
                         def colorInRGB = "#000000";
                         try {
-                            def colorMap = evaluate(settings["holiday${i}Color${it}"].toString());
+                            def colorMap = parseColorMap(settings["holiday${i}Color${it}"].toString());
                             colorInRGB = HSVtoRGB(colorMap)
                         }
                         catch (Exception ex) {
@@ -1146,7 +1146,7 @@ private applyIlluminationSettings(String prefix) {
             def illuminationColor = settings["${prefix}IlluminationColor"];
             if( illuminationColor != null ) {
                 try {
-                    colorMap = evaluate(illuminationColor);
+                    colorMap = parseColorMap(illuminationColor);
                 }
                 catch(Exception ex) {
                     error(ex);
