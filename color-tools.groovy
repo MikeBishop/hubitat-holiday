@@ -398,21 +398,13 @@ void error(String msg) {
 
 
 // Replaces evaluate(), which newer Hubitat firmware blocks.
-// Parses strings like "[hue: 82, saturation: 100, level: 100]".
+// Settings hold Groovy map literals like "[hue:82, saturation:100, level:100]";
+// convert to JSON the same way the picker JS does, then parseJson.
 private Map parseColorMap(value) {
-    if (value == null) return null
     if (value instanceof Map) return value
-    String text = value.toString().replace("[", "").replace("]", "")
-    Map result = [:]
-    for (String part in text.split(",")) {
-        String[] kv = part.split(":")
-        if (kv.length == 2) {
-            String k = kv[0].trim()
-            String v = kv[1].trim()
-            if (v.isNumber()) {
-                result[k] = v.contains(".") ? v.toBigDecimal() : v.toInteger()
-            }
-        }
-    }
-    return result.size() > 0 ? result : null
+    if (!value) return null
+    parseJson(value.toString().trim()
+        .replaceAll(/(\w+)\s*:/, '"$1":')
+        .replaceFirst(/^\[/, '{')
+        .replaceFirst(/\]$/, '}'))
 }

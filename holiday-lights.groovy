@@ -177,7 +177,7 @@ Map holidayDefinitions() {
                     colorDescription = colorsForThisHoliday.collect {
                         def colorInRGB = "#000000";
                         try {
-                            def colorMap = parseColorMap(settings["holiday${i}Color${it}"].toString());
+                            def colorMap = parseColorMap(settings["holiday${i}Color${it}"]);
                             colorInRGB = HSVtoRGB(colorMap)
                         }
                         catch (Exception ex) {
