@@ -195,7 +195,7 @@ private getColors(colorIndices, desiredLength, prefix = "") {
 
     def colors = colorIndices.collect{
         try {
-            evaluate(settings["${prefix}Color${it}"])
+            parseColorMap(settings["${prefix}Color${it}"])
         }
         catch(Exception ex) {
             error(ex);
@@ -394,4 +394,17 @@ void error(Exception ex) {
 
 void error(String msg) {
     log.error msg
+}
+
+
+// Replaces evaluate(), which newer Hubitat firmware blocks.
+// Settings hold Groovy map literals like "[hue:82, saturation:100, level:100]";
+// convert to JSON the same way the picker JS does, then parseJson.
+private Map parseColorMap(value) {
+    if (value instanceof Map) return value
+    if (!value) return null
+    parseJson(value.toString().trim()
+        .replaceAll(/(\w+)\s*:/, '"$1":')
+        .replaceFirst(/^\[/, '{')
+        .replaceFirst(/\]$/, '}'))
 }
